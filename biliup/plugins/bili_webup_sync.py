@@ -93,7 +93,7 @@ class BiliWebAsync(UploadBase):
                 "biz_id": "",
                 "type": 1
             }]
-        videos.desc = self.desc
+        videos.desc = self.data.get("description", self.desc)
         videos.copyright = self.copyright
         if self.copyright == 2:
             videos.source = self.data["url"]  # 添加转载地址说明
@@ -429,8 +429,9 @@ class BiliBili:
             context_data.pop('subtitle', None)
             videos = Data(**context_data)
         else:
-            # 对于第一个分片，确保使用正确的格式化标题
+            # 对于第一个分片，确保使用正确的格式化标题和简介
             videos.title = videos.title or self.video.title
+            videos.desc = self.data.get("description", self.desc)
             # 即使第一次上传也存储到context中以便后续分片使用
             context["sync_downloader_map"][str(self.database_row_id)] = videos.__dict__.copy()
 
