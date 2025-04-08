@@ -101,7 +101,7 @@ def fmt_title_and_desc(data):
     url = data.get('url')
     data["format_title"] = custom_fmtstr(context.get('title') or f'%Y.%m.%d{index}', date, title, streamer, url)
     if context.get('description'):
-        context['description'] = custom_fmtstr(context.get('description'), date, title, streamer, url)
+        data["description"] = custom_fmtstr(context.get('description'), date, title, streamer, url)
     return data, context
 
 
