@@ -52,3 +52,10 @@ ForgQi 第二条意见：平台列表通过布局不随内容滚动、去掉外�
 | `issue1705-v2-submitfail-global-to-douyu.png` | commit 3 校验定位在嵌套滚动容器内仍正常 |
 | `issue1705-v2-all-pages-light.png` | 13 页拼图（浅色，主区滚到底） |
 | `issue1705-v2-streamers-light-30cards-bottom.png` | 直播管理 30 张卡片滚到底（与上一轮相同） |
+
+## v2 第三轮（head `9838f29`，更新日志页不再覆盖页头）
+
+| 文件 | 内容 |
+| --- | --- |
+| `issue1705-v2-changelog-before.png` | 修前（`3ec900e`）：更新日志滚到底，版本卡片画在页头之上 |
+| `issue1705-v2-changelog-after.png` | 修后（`9838f29`）：去掉外层 sticky Header 与卡片流的 z-index，页头在最上层 |
