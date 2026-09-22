@@ -35,3 +35,20 @@
 | `issue1705-v2-overlay-override-modal-select.png` | 直播管理「配置覆写」弹窗（Collapse.Panel 不变）及其内部 Select 下拉定位正确 |
 | `issue1705-v2-submitfail-global-to-douyu.png` | commit 3：校验失败自动切到出错字段所在平台并提示（Tab 切换动画已恢复） |
 | `issue1705-v2-all-pages-light.png` | 13 页拼图：浅色 1440×900，主区滚到底，侧栏 / 页脚 / 页头全部在位 |
+
+## v2 第二轮（head `3ec900e`，平台设置去掉外层卡片、两栏独立滚动）
+
+ForgQi 第二条意见：平台列表通过布局不随内容滚动、去掉外层嵌套卡片。空间配置页改为每个 Tab 面板占满页头以下的剩余高度并在内部滚动；
+平台设置是左列列表 + 右栏字段两栏各自滚动。以下文件在 `3ec900e` 上重拍并覆盖同名旧文件（旧版本仍可按旧 SHA 引用）：
+
+| 文件 | 内容 |
+| --- | --- |
+| `issue1705-v2-dashboard-light-platform-bilibili-top.png` | 平台设置两栏布局，无外层卡片，浅色 |
+| `issue1705-v2-dashboard-dark-platform-bilibili-bottom.png` | 右栏（哔哩哔哩 1223px）滚到底，左列平台列表、页头「保存」、侧栏都不动 |
+| `issue1705-v2-mobile-dashboard-light-platform-bilibili-bottom.png` | 390px：上下堆叠，横向标签行固定在顶部，字段区独立滚动 |
+| `issue1705-v2-dashboard-light-global-top.png` | 全局设置一致去掉卡片，分区标题 + 分隔线 |
+| `issue1705-v2-overlay-select-dropdown-after-scroll.png` | 面板内预滚 1k px 打开 Select 并继续滚动，下拉跟随触发器 |
+| `issue1705-v2-overlay-override-modal-select.png` | 「配置覆写」弹窗及其内部 Select（不受影响） |
+| `issue1705-v2-submitfail-global-to-douyu.png` | commit 3 校验定位在嵌套滚动容器内仍正常 |
+| `issue1705-v2-all-pages-light.png` | 13 页拼图（浅色，主区滚到底） |
+| `issue1705-v2-streamers-light-30cards-bottom.png` | 直播管理 30 张卡片滚到底（与上一轮相同） |
