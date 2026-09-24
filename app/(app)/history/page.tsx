@@ -10,6 +10,7 @@ import { humDate } from '@/app/lib/utils'
 import { formatSize } from '@/app/lib/use-dashboard'
 import PageHeader from '../components/PageHeader'
 import LiveMonitor from '@/app/ui/LiveMonitor'
+import SessionTable from '@/app/ui/workbench/SessionTable'
 import dc from '@/app/ui/data-card.module.scss'
 import styles from './page.module.scss'
 
@@ -17,15 +18,16 @@ const Players = dynamic(() => import('@/app/ui/Player'), {
   ssr: false,
 })
 
-type HistoryTab = 'files' | 'monitor'
+type HistoryTab = 'sessions' | 'files' | 'monitor'
 
 /**
- * 历史记录：「录制文件」（已录完的文件回放）与「实时监视」（正在录制的直播间多路同屏）两个 Tab。
+ * 历史记录：「场次」（按一场直播归组，可进剪辑台）、「录制文件」（逐个文件回放）与
+ * 「实时监视」（正在录制的直播间多路同屏）三个 Tab。
  * 监视器是独立组件 <LiveMonitor />，要挪到别的页面只需换个挂载点。
  */
 export default function History() {
   const { Text } = Typography
-  const [tab, setTab] = useState<HistoryTab>('files')
+  const [tab, setTab] = useState<HistoryTab>('sessions')
   const { data: data, error, isLoading } = useSWR<FileList[]>('/v1/videos', fetcher)
   const [fileName, setFileName] = useState<string>()
   const [visible, setVisible] = useState(false)
@@ -69,7 +71,7 @@ export default function History() {
       <PageHeader
         icon={<IconVideoListStroked size="large" />}
         title="历史记录"
-        description="已录制的视频文件可在线回放；「实时监视」同屏查看正在录制的直播间"
+        description="按场次打开剪辑台，或逐个回放录制文件；「实时监视」同屏查看正在录制的直播间"
       />
       <div className={dc.content}>
         <Tabs
@@ -79,6 +81,11 @@ export default function History() {
           className={styles.tabs}
           keepDOM={false}
         >
+          <TabPane tab="场次" itemKey="sessions">
+            <div className={dc.card}>
+              <SessionTable />
+            </div>
+          </TabPane>
           <TabPane tab="录制文件" itemKey="files">
             <div className={dc.card}>
               <Table
