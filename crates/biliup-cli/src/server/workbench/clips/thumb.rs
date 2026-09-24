@@ -39,6 +39,20 @@ pub enum ThumbError {
     Failed(String),
 }
 
+/// 剪辑计划的报错说的是「范围」「剪」，取帧只有一个时间点。
+fn for_frame(message: &str) -> String {
+    message
+        .replace("所选范围里 ", "")
+        .replace(
+            "（可能整段落在断流空档里）",
+            "（落在断流空档里或超出了录像）",
+        )
+        .replace("所选范围里", "这个时间点")
+        .replace("剪不了", "取不了画面")
+        .replace("把范围挪开这一段后重试", "换个时间点再取")
+        .replace("换个范围再剪", "换个时间点再取")
+}
+
 /// 取 `t_ms`（场次时间）那一帧，缩到最宽 `width` 像素（不放大），返回 JPEG。
 pub async fn frame(
     pool: &ConnectionPool,
@@ -58,10 +72,14 @@ pub async fn frame(
         .await
         .map_err(|e| ThumbError::Failed(e.to_string()))?;
     let t_ms = t_ms.max(0);
-    let plan = plan::resolve(pool, session_id, t_ms, t_ms + 1, WAIT, || {})
+    let mut waited = false;
+    let plan = plan::resolve(pool, session_id, t_ms, t_ms + 1, WAIT, || waited = true)
         .await
         .map_err(|e| match e {
-            PlanError::Unavailable(m) => ThumbError::Unavailable(m.replace("剪不了", "取不了画面")),
+            PlanError::Unavailable(_) if waited => {
+                ThumbError::Unavailable("这个时间点还没录到画面，往前挑一个时间点再取".into())
+            }
+            PlanError::Unavailable(m) => ThumbError::Unavailable(for_frame(&m)),
             PlanError::Io(e) => ThumbError::Failed(format!("读录像出错：{e}")),
             PlanError::Db(e) => ThumbError::Failed(format!("读数据库出错：{e}")),
         })?;

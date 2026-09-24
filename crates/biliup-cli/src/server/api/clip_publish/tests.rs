@@ -933,7 +933,9 @@ async fn frames_are_grabbed_from_real_recordings() {
         None,
     )
     .await;
-    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let message = text_of(response, StatusCode::CONFLICT).await;
+    assert!(message.contains("换个时间点再取"), "{message}");
+    assert!(!message.contains("范围"), "{message}");
     let response = send(
         &f.app,
         Some(&viewer),
