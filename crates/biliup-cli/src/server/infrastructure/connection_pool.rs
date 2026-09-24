@@ -323,6 +323,10 @@ mod tests {
                 9,
                 "edff6c311dbece198eec1e0e4aa55983c56996d9b5ea2a7b352b479dd71149ccfe52145a2178ed52b33fc4ddc4c5ea3e",
             ),
+            (
+                10,
+                "6a37aaac20f18ea3e0a9cdb1a6bb971882eb843b5569ea26897a61f328d0813176efebf788d4e8b188f4cf3dd4db2fc6",
+            ),
         ];
         let embedded = sqlx::migrate!();
         let actual: Vec<(i64, String)> = embedded
@@ -389,7 +393,7 @@ mod tests {
                 .unwrap();
         assert_eq!(
             migrations.iter().map(|m| m.0).collect::<Vec<_>>(),
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
             "待应用的迁移必须补齐"
         );
         let embedded = sqlx::migrate!();
@@ -621,7 +625,7 @@ mod tests {
                 .fetch_all(&pool)
                 .await
                 .unwrap();
-        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(versions, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         let tables: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN \
              ('streamerinfo', 'stream_sessions', 'session_streamerinfo', 'segments') ORDER BY name",
