@@ -26,7 +26,7 @@ const STATE_LABEL: Record<SegmentView['state'], string> = {
   finished: '已录完',
   missing: '文件不见了',
   deleted: '录像已清理',
-  pending_delete: '等待清理',
+  pending_delete: '等待清理（仍可回看）',
 }
 
 function pct(t: number, from: number, to: number): number {

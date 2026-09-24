@@ -67,9 +67,11 @@ export const keyframesUrl = (id: number, from: number, to: number) =>
 export const mediaUrl = (id: number, from: number) =>
   `${API_BASE}/v1/sessions/${id}/media?from=${Math.max(0, Math.round(from))}`
 
-/** 只有录制中、已写完的分段能回看和剪 */
+/**
+ * 录制中、已写完的分段能回看和剪；等待清理的也能（文件还在，是被切片等引用住了才没删），与后端一致
+ */
 export function isReadable(segment: SegmentView): boolean {
-  return segment.state === 'recording' || segment.state === 'finished'
+  return segment.state === 'recording' || segment.state === 'finished' || segment.state === 'pending_delete'
 }
 
 /** 分段的末尾；正在写且还没有关键帧时按起点算 */
