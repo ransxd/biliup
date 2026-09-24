@@ -175,9 +175,8 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
 
   const segments = useMemo(() => detail?.segments ?? [], [detail])
   const gaps = useMemo(() => detail?.gaps ?? [], [detail])
-  const duration = detail?.duration_ms ?? 0
-  /** 时间条画到最后一个分段的末尾：场次时长只算可读分段，末尾已清理的分段也要画出来 */
-  const timelineEnd = segments.reduce((end, s) => Math.max(end, segmentEnd(s)), duration)
+  /** 时间轴画到最后一个分段的末尾：后端的场次时长只算可读分段，末尾已清理的分段也要画出来 */
+  const duration = segments.reduce((end, s) => Math.max(end, segmentEnd(s)), detail?.duration_ms ?? 0)
   const playable = detail ? hasPlayableMedia(detail) : false
   const readableSegments = segments.filter(isReadable)
   const onlyFmp4 = readableSegments.length > 0 && readableSegments.every(isFragmentedMp4)
@@ -236,8 +235,8 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
 
   // ---------- 细节条范围 ----------
   const center = focus ?? playhead ?? 0
-  const winFrom = Math.max(0, Math.min(center - DETAIL_HALF_MS, timelineEnd - 2 * DETAIL_HALF_MS))
-  const winTo = Math.max(winFrom + Math.min(2 * DETAIL_HALF_MS, Math.max(timelineEnd, 60_000)), winFrom + 1000)
+  const winFrom = Math.max(0, Math.min(center - DETAIL_HALF_MS, duration - 2 * DETAIL_HALF_MS))
+  const winTo = Math.max(winFrom + Math.min(2 * DETAIL_HALF_MS, Math.max(duration, 60_000)), winFrom + 1000)
   const kFrom = Math.floor(winFrom / KEYFRAME_GRID_MS) * KEYFRAME_GRID_MS
   const kTo = Math.ceil(winTo / KEYFRAME_GRID_MS) * KEYFRAME_GRID_MS
   const nearTail = !!detail?.recording && kTo >= duration - KEYFRAME_GRID_MS
@@ -834,7 +833,7 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
           ) : (
             <>
               <OverviewBar
-                duration={timelineEnd}
+                duration={duration}
                 segments={segments}
                 gaps={gaps}
                 markers={markers}
@@ -844,7 +843,7 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
                 detailWindow={[winFrom, winTo]}
                 overlay={
                   segments.some((seg) => seg.has_danmaku) ? (
-                    <DanmakuDensity sessionId={sessionId} duration={timelineEnd} recording={detail.recording} />
+                    <DanmakuDensity sessionId={sessionId} duration={duration} recording={detail.recording} />
                   ) : null
                 }
                 onSeek={seek}
