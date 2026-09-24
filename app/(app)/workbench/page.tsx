@@ -150,6 +150,7 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
   const { can, isLoading: meLoading } = useMe()
   const canEdit = can('clip.edit')
   const canDownload = can('file.view')
+  const canSubmit = can('upload.submit')
   const editReason = meLoading
     ? '正在读取权限…'
     : '只读观察者不能改标记和切片：需要 clip.edit 权限，请让管理员把你的角色改成操作员'
@@ -1016,6 +1017,9 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
             onSelectMarker={selectFromMarker}
             onLoadClip={loadClip}
             compact={compact}
+            canSubmit={canSubmit}
+            currentMs={current}
+            playable={playable}
           />
         </aside>
       </div>

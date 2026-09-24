@@ -3,6 +3,7 @@ import { useState } from 'react'
 import useSWR, { mutate, type SWRConfiguration } from 'swr'
 import { API_BASE, fetcher, handleResponse } from './api-streamer'
 import { ReportedError } from './markers'
+import type { StudioOverride } from './publish'
 
 export type ClipMode = 'quick' | 'precise'
 export type ClipState = 'draft' | 'exporting' | 'ready' | 'failed' | 'published' | 'discarded'
@@ -34,6 +35,13 @@ export interface Clip {
   duration_ms: number | null
   /** 导出失败的原因 */
   error: string | null
+  /** 发布用的上传模板；null = 主播绑定的模板 */
+  template_id: number | null
+  /** 发布设置里覆盖模板的部分（没覆盖时是 `{}`） */
+  studio_override: StudioOverride
+  /** 发布后的稿件号 */
+  archive_bvid: string | null
+  published_at: number | null
   created_by: number | null
   created_at: number
   updated_at: number
@@ -61,7 +69,7 @@ const oneRefresh = (clip?: Clip) => (!clip || clip.state === 'exporting' ? 1000 
  * 按最新数据决定轮询间隔（导出中每秒一次）。不能把函数直接交给 SWR 的 `refreshInterval`：函数返回 0 后
  * SWR 的定时器就不再续期，之后开始的导出不会被轮询到；传数值时数值一变 SWR 会重新计时。
  */
-function usePolled<T>(key: string, interval: (data?: T) => number, config?: SWRConfiguration<T>) {
+export function usePolled<T>(key: string, interval: (data?: T) => number, config?: SWRConfiguration<T>) {
   const [ms, setMs] = useState(0)
   const swr = useSWR<T>(key, fetcher, { ...config, refreshInterval: ms })
   const wanted = interval(swr.data)
@@ -89,7 +97,7 @@ export function extensionOf(clip: Clip): string {
   return dot >= 0 ? name.slice(dot).toLowerCase() : ''
 }
 
-async function send(url: string, init: RequestInit): Promise<Response> {
+export async function send(url: string, init: RequestInit): Promise<Response> {
   const res = await fetch(API_BASE + url, init)
   try {
     return await handleResponse(res)
@@ -101,16 +109,17 @@ async function send(url: string, init: RequestInit): Promise<Response> {
   }
 }
 
-async function sendJson<T>(url: string, method: string, body: unknown): Promise<T> {
-  const res = await send(url, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+export async function sendJson<T>(url: string, method: string, body?: unknown): Promise<T> {
+  const res = await send(
+    url,
+    body === undefined
+      ? { method }
+      : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  )
   return res.json()
 }
 
-function refresh(clip: Pick<Clip, 'id' | 'session_id'>) {
+export function refresh(clip: Pick<Clip, 'id' | 'session_id'>) {
   void mutate(clipsUrl(clip.session_id))
   void mutate(clipUrl(clip.id))
 }
@@ -149,7 +158,13 @@ export async function createLiveClip(
 
 export async function updateClip(
   clip: Pick<Clip, 'id' | 'session_id'>,
-  patch: { in_ms?: number; out_ms?: number; title?: string }
+  patch: {
+    in_ms?: number
+    out_ms?: number
+    title?: string
+    template_id?: number | null
+    studio_override?: StudioOverride | null
+  }
 ): Promise<Clip> {
   const updated = await sendJson<Clip>(`${clipsUrl(clip.session_id)}/${clip.id}`, 'PATCH', patch)
   refresh(updated)
