@@ -12,8 +12,8 @@
 //!
 //! 只接受场次 id 和场次时间，文件路径全部来自 `segments` 表。
 
-mod flv;
-mod ts;
+pub(in crate::server::workbench) mod flv;
+pub(in crate::server::workbench) mod ts;
 
 use super::index::{self, Container};
 use super::live::{self, LiveWatch};
@@ -40,7 +40,7 @@ const MAX_CLOCK_STEP_MS: i64 = 1000;
 const DEFAULT_FRAME_MS: i64 = 33;
 /// 等没有边写边建索引的下一段出现第一个关键帧时，写盘计数器每增长这么多才重新扫一次盘。
 const NEXT_SEGMENT_PROBE_BYTES: u64 = 256 * 1024;
-const TS_PARAM_SNIFF: usize = 256 * 1024;
+pub(in crate::server::workbench) const TS_PARAM_SNIFF: usize = 256 * 1024;
 /// 写盘计数器在数据进入写盘缓冲之前就累加（mesio 在修复管线之前逐 tag 计数，落盘却是成块的）。
 /// 被唤醒却没读到新内容时，下一次等计数器多涨这么多再看；连续落空就翻倍到上限，读到数据后复位。
 const EMPTY_WAKE_STEP_MIN: u64 = 16 * 1024;
@@ -218,14 +218,21 @@ impl Dvr {
     }
 }
 
-async fn read_at(file: &mut File, offset: u64, len: usize) -> io::Result<Vec<u8>> {
+pub(in crate::server::workbench) async fn read_at(
+    file: &mut File,
+    offset: u64,
+    len: usize,
+) -> io::Result<Vec<u8>> {
     file.seek(SeekFrom::Start(offset)).await?;
     let mut buf = Vec::with_capacity(len);
     (&mut *file).take(len as u64).read_to_end(&mut buf).await?;
     Ok(buf)
 }
 
-fn ts_fingerprint(program: &ts::Program, keyframe: &[u8]) -> Vec<u8> {
+pub(in crate::server::workbench) fn ts_fingerprint(
+    program: &ts::Program,
+    keyframe: &[u8],
+) -> Vec<u8> {
     let mut out = Vec::new();
     for (pid, stream_type) in &program.streams {
         out.extend_from_slice(&pid.to_be_bytes());
