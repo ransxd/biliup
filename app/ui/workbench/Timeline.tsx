@@ -139,6 +139,7 @@ function Pins({
           <div
             key={m.id}
             className={styles.pin}
+            data-marker-id={m.id}
             style={{ left: `${pct(m.at_ms, from, to)}%`, ...(m.color ? { color: m.color } : null) }}
             title={`${formatSessionTime(m.at_ms)} ${m.label || '标记'}`}
             onClick={(e) => {
