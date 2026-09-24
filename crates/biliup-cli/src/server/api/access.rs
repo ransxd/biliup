@@ -202,6 +202,7 @@ mod tests {
         ("PUT", "/v1/configuration"),
         ("GET", "/v1/streamer-info"),
         ("GET", "/v1/streamer-info/files/1"),
+        ("PATCH", "/v1/sessions/1"),
         ("GET", "/v1/upload/streamers"),
         ("POST", "/v1/upload/streamers"),
         ("GET", "/v1/upload/streamers/1"),
@@ -265,6 +266,7 @@ mod tests {
             | ("PUT", "/v1/streamers")
             | ("DELETE", "/v1/streamers/1")
             | ("PUT", "/v1/streamers/1/pause")
+            | ("PATCH", "/v1/sessions/1")
             | ("POST", "/v1/upload/streamers")
             | ("DELETE", "/v1/upload/streamers/1")
             | ("GET", "/v1/users")
@@ -317,6 +319,7 @@ mod tests {
             .route("/v1/configuration", any())
             .route("/v1/streamer-info", ok())
             .route("/v1/streamer-info/files/{id}", ok())
+            .route("/v1/sessions/{id}", patch(|| async { StatusCode::OK }))
             .route("/v1/upload/streamers", any())
             .route("/v1/upload/streamers/{id}", any())
             .route("/v1/users", any())

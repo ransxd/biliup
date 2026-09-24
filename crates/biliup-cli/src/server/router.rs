@@ -19,6 +19,7 @@ use crate::server::api::sessions::{
     get_session, get_session_danmaku_density, get_session_keyframes, get_session_media,
     list_sessions,
 };
+use crate::server::api::session_retention::patch_session;
 use crate::server::infrastructure::service_register::ServiceRegister;
 use axum::Router;
 use axum::body::Body;
@@ -83,6 +84,8 @@ pub fn router(service_register: ServiceRegister) -> Router<()> {
         // 主播信息路由
         .route("/v1/streamer-info", get(get_streamer_info)) // 获取主播信息
         .route("/v1/streamer-info/files/{id}", get(get_streamer_info_files)) // 获取主播信息
+        // 「保留这场」：改场次的 retain_until
+        .route("/v1/sessions/{id}", patch(patch_session))
         // 上传模板管理路由
         .route("/v1/upload/streamers", get(get_upload_streamers_endpoint)) // 获取上传模板列表
         .route(

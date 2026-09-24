@@ -16,6 +16,8 @@ pub mod live_rates;
 pub mod markers;
 /// 非超管的配置与主播数据脱敏
 pub mod redact;
+/// 「保留这场」：改场次的保留期
+pub mod session_retention;
 pub mod sessions;
 /// 单页应用静态文件处理
 pub mod spa;
