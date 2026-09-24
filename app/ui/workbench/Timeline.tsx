@@ -165,6 +165,7 @@ export function OverviewBar({
   playhead,
   live,
   detailWindow,
+  overlay,
   onSeek,
   onBlocked,
   onPickMarker,
@@ -177,6 +178,8 @@ export function OverviewBar({
   playhead: number | null
   live: boolean
   detailWindow: [number, number] | null
+  /** 叠在分段色块上、不接收点击的图层（弹幕密度） */
+  overlay?: React.ReactNode
   onSeek: (ms: number) => void
   onBlocked: (segment: SegmentView) => void
   onPickMarker: (m: Marker) => void
@@ -206,6 +209,7 @@ export function OverviewBar({
       >
         <Segments segments={segments} from={0} to={to} />
         <Gaps gaps={gaps} from={0} to={to} />
+        {overlay}
         {detailWindow ? (
           <div
             className={styles.window}

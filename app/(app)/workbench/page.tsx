@@ -54,6 +54,7 @@ import { LivePreviewPlayer } from '@/app/ui/LivePreview'
 import { isTyping, showMarkerToast } from '@/app/ui/MarkerControls'
 import DvrPlayer, { type DvrHandle, type DvrPhase } from '@/app/ui/workbench/DvrPlayer'
 import { DetailBar, OverviewBar, type Selection } from '@/app/ui/workbench/Timeline'
+import { DanmakuDensity } from '@/app/ui/workbench/DanmakuDensity'
 import { type PanelTab, SidePanel } from '@/app/ui/workbench/SidePanel'
 import styles from '@/app/ui/workbench/workbench.module.scss'
 
@@ -821,6 +822,11 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
                 playhead={playhead}
                 live={live}
                 detailWindow={[winFrom, winTo]}
+                overlay={
+                  segments.some((seg) => seg.has_danmaku) ? (
+                    <DanmakuDensity sessionId={sessionId} duration={duration} recording={detail.recording} />
+                  ) : null
+                }
                 onSeek={seek}
                 onBlocked={blocked}
                 onPickMarker={pickMarker}

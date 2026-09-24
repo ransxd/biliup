@@ -147,7 +147,14 @@ pub fn required_permission(method: &Method, route: &str, raw_path: &str) -> Opti
             PreviewView
         }
         "/v1/ws/live-rates" | "/v1/live-rates" if get => StreamerView,
-        "/v1/sessions" | "/v1/sessions/{id}" | "/v1/sessions/{id}/keyframes" if get => FileView,
+        "/v1/sessions"
+        | "/v1/sessions/{id}"
+        | "/v1/sessions/{id}/keyframes"
+        | "/v1/sessions/{id}/danmaku-density"
+            if get =>
+        {
+            FileView
+        }
         "/v1/sessions/{id}/media" if get => PreviewView,
         "/v1/sessions/{id}/markers" if get => FileView,
         "/v1/sessions/{id}/markers" if method == Method::POST => ClipEdit,
