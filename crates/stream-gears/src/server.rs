@@ -297,6 +297,9 @@ pub(crate) async fn _main(args: &[String]) -> AppResult<()> {
             )
             .await?;
         }
+        Commands::Season(args) => {
+            biliup_cli::season_cli::run(args, cli.user_cookie, cli.proxy.as_deref()).await?
+        }
         Commands::User { action } => biliup_cli::web_user_cli::run(action).await?,
         Commands::List {
             is_pubing,
