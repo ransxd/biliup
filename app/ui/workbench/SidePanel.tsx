@@ -430,9 +430,11 @@ function ClipRow({
   editReason,
   canDownload,
   onLoad,
+  compact,
 }: {
   clip: Clip
   active: boolean
+  compact: boolean
   warning: string | null
   ffmpeg: FfmpegState
   canEdit: boolean
@@ -443,7 +445,7 @@ function ClipRow({
   const [renaming, setRenaming] = useState(false)
   return (
     <li className={styles.row} data-current={active || undefined} data-clip-state={clip.state}>
-      <button type="button" className={styles.rowTime} onClick={() => onLoad(clip)} title="载入到细节条，跳到入点">
+      <button type="button" className={styles.rowTime} onClick={() => onLoad(clip)} title={compact ? '跳到入点' : '载入到细节条，跳到入点'}>
         <IconScissors size="small" aria-hidden="true" />
         {formatSessionTime(clip.in_ms)}
       </button>
@@ -635,7 +637,7 @@ export function SidePanel({
   onSeekMarker: (m: Marker) => void
   onSelectMarker: (m: Marker) => void
   onLoadClip: (c: Clip) => void
-  /** 手机宽度：只有标记列表 */
+  /** 手机宽度：没有细节条，标记不能选段，切片只能跳到入点 */
   compact: boolean
 }) {
   const { Text } = Typography
@@ -670,16 +672,6 @@ export function SidePanel({
       )}
     </>
   )
-  if (compact) {
-    return (
-      <section className={styles.panel} data-compact="true" aria-label="标记">
-        <div className={styles.panelHead}>
-          <IconFlag aria-hidden="true" /> 标记 <span className={styles.panelCount}>{markers.length}</span>
-        </div>
-        {markerList}
-      </section>
-    )
-  }
   return (
     <section className={styles.panel} aria-label="标记与切片">
       <Tabs type="line" size="small" activeKey={tab} onChange={(k) => onTab(k as PanelTab)} keepDOM={false}>
@@ -715,6 +707,7 @@ export function SidePanel({
                   editReason={editReason}
                   canDownload={canDownload}
                   onLoad={onLoadClip}
+                  compact={compact}
                 />
               ))}
             </ul>

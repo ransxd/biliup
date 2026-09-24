@@ -492,20 +492,6 @@
   overflow: auto;
 }
 
-.panelHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
-  font-weight: 600;
-  border-bottom: 1px solid var(--semi-color-fill-2);
-}
-
-.panelCount {
-  color: var(--semi-color-text-2);
-  font-weight: 400;
-}
-
 .panelNote {
   display: block;
   padding: 8px 12px 0;
@@ -664,7 +650,7 @@
   }
 }
 
-/* 手机宽度：只留播放器、大号「标记」按钮和标记列表 */
+/* 手机宽度：只留播放器、大号「标记」按钮和标记 / 切片列表 */
 .page[data-compact] {
   gap: 12px;
   padding: 12px;
