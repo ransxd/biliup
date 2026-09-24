@@ -96,7 +96,7 @@ fn plan_message(e: PlanError) -> String {
 }
 
 /// ffmpeg 失败时从 stderr 里挑一句给人看。
-fn ffmpeg_message(stderr: &str, status: Option<std::process::ExitStatus>) -> String {
+pub(super) fn ffmpeg_message(stderr: &str, status: Option<std::process::ExitStatus>) -> String {
     if stderr.contains("No space left on device") {
         return "磁盘空间不足，写切片文件失败；清理磁盘后重试".into();
     }
@@ -104,16 +104,32 @@ fn ffmpeg_message(stderr: &str, status: Option<std::process::ExitStatus>) -> Str
         return "这个 FFmpeg 没有 libx264 编码器（常见于 LGPL 版），精确剪需要带 libx264 的 FFmpeg"
             .into();
     }
+    // 动态链接器的警告（"no version information available"）不是失败原因。
     let last = stderr
         .lines()
         .map(str::trim)
-        .rfind(|l| !l.is_empty())
+        .rfind(|l| !l.is_empty() && !l.contains("no version information available"))
         .unwrap_or_default();
+    if last.is_empty() && status.is_some_and(interrupted) {
+        return "FFmpeg 被中止了（可能是服务正在停止），重试即可".into();
+    }
     match status {
         Some(status) if last.is_empty() => format!("FFmpeg 转码失败（{status}）"),
         _ if last.is_empty() => "FFmpeg 转码失败".into(),
         _ => format!("FFmpeg 转码失败：{last}"),
     }
+}
+
+/// ffmpeg 收到 SIGINT/SIGTERM 时以 255 退出；被 SIGKILL 之类直接杀掉时没有退出码。
+fn interrupted(status: std::process::ExitStatus) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if status.signal().is_some() {
+            return true;
+        }
+    }
+    status.code() == Some(255)
 }
 
 /// `path` 是不是用 codec id 12 写 HEVC 的 FLV。只在 ffmpeg 失败后用来解释原因：打过补丁的 ffmpeg 能读。

@@ -504,3 +504,25 @@ async fn recognizes_flv_that_carries_hevc_as_codec_12() {
     assert!(!export::legacy_hevc_flv(&avc).await);
     assert!(!export::legacy_hevc_flv(&dir.path().join("missing.flv")).await);
 }
+
+#[cfg(unix)]
+#[test]
+fn ffmpeg_failure_skips_loader_noise_and_names_interruptions() {
+    use super::export::ffmpeg_message;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+    let noise =
+        "ffmpeg: /lib/libncursesw.so.6: no version information available (required by ffmpeg)\n";
+    let interrupted = ffmpeg_message(noise, Some(ExitStatus::from_raw(255 << 8)));
+    assert!(interrupted.contains("被中止"), "{interrupted}");
+    let killed = ffmpeg_message(noise, Some(ExitStatus::from_raw(9)));
+    assert!(killed.contains("被中止"), "{killed}");
+    let real = ffmpeg_message(
+        &format!("{noise}pipe:: Invalid data found when processing input\n"),
+        Some(ExitStatus::from_raw(1 << 8)),
+    );
+    assert_eq!(
+        real,
+        "FFmpeg 转码失败：pipe:: Invalid data found when processing input"
+    );
+}
