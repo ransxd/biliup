@@ -4,12 +4,14 @@
 //! - [`recorder`]：下载器开段 / 关段时写库，维护场次时间轴；
 //! - [`index`]：分段文件旁的 `<分段>.idx` 关键帧索引（不进 SQLite）；
 //! - [`live`]：本进程正在录的场次，以及场次时间与墙钟的换算；
+//! - [`markers`]：看直播时打的标记（`markers`）；
 //! - [`locate`] / [`session_keyframes`]：按场次时间找到可以落刀 / 起播的分段与字节偏移；
 //! - [`recover`]：启动时收尾上次异常退出留下的 `recording` 分段与没结束的场次。
 
 pub mod dvr;
 pub mod index;
 pub mod live;
+pub mod markers;
 pub mod recorder;
 pub mod store;
 
