@@ -129,6 +129,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
 const EXTRA_PAGE_PERMS: { prefix: string; perm: Permission }[] = [
   { prefix: '/upload-manager/add', perm: 'template.edit' },
   { prefix: '/upload-manager/edit', perm: 'template.edit' },
+  { prefix: '/workbench', perm: 'file.view' },
 ]
 
 const matches = (pathname: string, href: string) =>
