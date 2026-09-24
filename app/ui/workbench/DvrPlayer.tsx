@@ -43,7 +43,7 @@ function positionOf(video: HTMLVideoElement | null, t: Timing, from: number): nu
  * mpegts.js 会把第一帧的时间戳归到 0 附近，所以取第一次有缓冲时的 `buffered.start(0)` 作为那个关键帧在
  * 播放器里的位置，之后「场次时间 = 起播关键帧 + (currentTime − 该位置)」。起播后先就地跳到 `from` 本身。
  *
- * 一次打开只放一条响应：遇到断流缺口、编码参数变化或场次结束，服务端结束响应，这里报 `ended`，
+ * 一次打开只放一条响应：遇到断流缺口、已清理 / 缺失的分段、编码参数变化或场次结束，服务端结束响应，这里报 `ended`，
  * 由剪辑台决定从哪里重开。换位置同样由调用方换 `key` 重建，卸载时中止拉流。
  */
 const DvrPlayer = forwardRef<
@@ -55,7 +55,7 @@ const DvrPlayer = forwardRef<
     type: 'flv' | 'mpegts'
     muted: boolean
     onPosition: (ms: number) => void
-    /** `status` 是服务端拒绝时的 HTTP 状态码 */
+    /** `status` 是服务端拒绝时的 HTTP 状态码；连不上或连接中途断掉为 0 */
     onPhase: (phase: DvrPhase, message?: string, status?: number) => void
     onEnded: (lastMs: number) => void
     onMutedChange: (muted: boolean) => void
@@ -150,7 +150,8 @@ const DvrPlayer = forwardRef<
     )
     player.on(mpegts.Events.ERROR, (errorType: string, detail: string, info?: { code?: number; msg?: string }) => {
       if (serverError || disposed) return
-      cb().onPhase('error', describeMpegtsError(errorType, detail, info))
+      const network = errorType === mpegts.ErrorTypes.NETWORK_ERROR
+      cb().onPhase('error', describeMpegtsError(errorType, detail, info), network ? 0 : undefined)
     })
 
     const alignToFrom = () => {

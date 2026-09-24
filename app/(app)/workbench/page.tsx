@@ -71,8 +71,9 @@ const JUMP_MS = 10_000
 const DETACH_AFTER_PAUSE_MS = 20_000
 /** 场次进行中时，详情（分段、时长）和细节条末尾的关键帧多久刷新一次 */
 const LIVE_REFRESH_MS = 3_000
-/** 刚开录时详情里已经有画面、盘上还没有（下载器写盘有缓冲），回看返回 404；隔这么久重试 */
-const NO_MEDIA_RETRY_MS = 3_000
+/** 回看连接因网络断掉时隔多久自动重开、最多连续几次（起播成功后清零） */
+const NETWORK_RETRY_MS = 3_000
+const NETWORK_RETRIES = 3
 /** 手机宽度：只留播放器、标记按钮和标记列表 */
 const COMPACT_WIDTH = 760
 
@@ -217,6 +218,7 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
   const [phase, setPhase] = useState<DvrPhase>('connecting')
   const [message, setMessage] = useState<string | null>(null)
   const [errorStatus, setErrorStatus] = useState<number | null>(null)
+  const [retries, setRetries] = useState(0)
   const [pos, setPos] = useState<number | null>(null)
   const [focus, setFocus] = useState<number | null>(null)
   const [muted, setMuted] = useState(false)
@@ -273,6 +275,7 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
   }, [])
 
   const openAt = (ms: number) => {
+    setRetries(0)
     setMessage(null)
     setPhase('connecting')
     setMode((m) => ({ kind: 'dvr', from: Math.max(0, Math.round(ms)), nonce: (m?.kind === 'dvr' ? m.nonce : 0) + 1 }))
@@ -296,26 +299,6 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
   }
 
   const onPosition = (ms: number) => {
-    // 服务端在同一条响应里跳过已清理 / 丢失的分段（时间戳照场次时间往后跳），mpegts.js 会把这种跳变抹平接着放，
-    // 这时按起播点推算的位置会落进不可读的分段里、比真实画面慢一截：从下一个可读分段重开，把位置对回来
-    // 只认严格落在不可读分段内部、且离起播点有一段距离的位置：分段首尾相接，边界上的位置也属于下一个可读分段
-    const seg = segments.find((s) => ms > s.start_ms && ms < segmentEnd(s))
-    const inCleaned =
-      mode?.kind === 'dvr' &&
-      ms > mode.from + 500 &&
-      !!seg &&
-      !isReadable(seg) &&
-      !segments.some((s) => isReadable(s) && ms >= s.start_ms && ms <= segmentEnd(s))
-    if (inCleaned) {
-      const end = segmentEnd(seg)
-      const next = segments.find((s) => isReadable(s) && s.start_ms >= end)
-      if (next) {
-        Toast.info({ id: 'deleted-skip', content: `跳过已清理的录像，从 ${formatSessionTime(next.start_ms)} 继续`, duration: 2 })
-        setPos(next.start_ms)
-        openAt(next.start_ms)
-        return
-      }
-    }
     setPos(ms)
     setFocus((f) => {
       const c = f ?? ms
@@ -328,16 +311,20 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
     setPhase(p)
     setMessage(p === 'error' ? (text ?? '回看出错') : null)
     setErrorStatus(p === 'error' ? (status ?? null) : null)
+    if (p === 'playing') setRetries(0)
   }, [])
-  // 响应结束：断流缺口 / 编码参数变化处从下一个可读分段接着放；没有下一段就停在这里
+  // 响应结束：断流缺口、已清理 / 缺失的分段、编码参数变化处从下一个可读分段接着放；没有下一段就停在这里
   const onEnded = (lastMs: number) => {
     let index = -1
     segments.forEach((s, i) => {
       if (s.start_ms <= lastMs + 500) index = i
     })
-    const next = segments.slice(index + 1).find(isReadable)
+    const rest = segments.slice(index + 1)
+    const next = rest.find(isReadable)
     if (next && mode?.kind === 'dvr' && next.start_ms > mode.from) {
-      if (next.gap_before_ms > 0) {
+      if (rest.indexOf(next) > 0 || (index >= 0 && !isReadable(segments[index]))) {
+        Toast.info({ id: 'deleted-skip', content: `跳过已清理的录像，从 ${formatSessionTime(next.start_ms)} 继续`, duration: 2 })
+      } else if (next.gap_before_ms > 0) {
         Toast.info({ id: 'gap-skip', content: `跳过 ${formatSpan(next.gap_before_ms)} 的断流，从下一段继续`, duration: 2 })
       }
       setPos(next.start_ms)
@@ -359,14 +346,16 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
     return () => clearTimeout(timer)
   }, [modeKind, phase])
 
-  const recording = !!detail?.recording
-  const retryFrom = mode?.kind === 'dvr' && phase === 'error' && errorStatus === 404 && recording ? mode.from : null
+  // 连不上、连接中途断掉或服务端 5xx 时从停下的地方自动重开几次；服务端明确拒绝（404、415 等）不重试
+  const retryable = errorStatus !== null && (errorStatus === 0 || errorStatus >= 500)
+  const retryFrom =
+    mode?.kind === 'dvr' && phase === 'error' && retryable && retries < NETWORK_RETRIES ? (pos ?? mode.from) : null
   useEffect(() => {
     if (retryFrom === null) return
-    const timer = setTimeout(
-      () => setMode((m) => (m?.kind === 'dvr' ? { kind: 'dvr', from: retryFrom, nonce: m.nonce + 1 } : m)),
-      NO_MEDIA_RETRY_MS
-    )
+    const timer = setTimeout(() => {
+      setRetries((n) => n + 1)
+      setMode((m) => (m?.kind === 'dvr' ? { kind: 'dvr', from: Math.round(retryFrom), nonce: m.nonce + 1 } : m))
+    }, NETWORK_RETRY_MS)
     return () => clearTimeout(timer)
   }, [retryFrom])
 
@@ -679,7 +668,7 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
   } else {
     const overlay =
       retryFrom !== null
-        ? '正在等第一段画面：录像还没写到盘上，3 秒后自动重试…'
+        ? `${message ?? '回看连接断开'}（${NETWORK_RETRY_MS / 1000} 秒后自动重试，第 ${retries + 1}/${NETWORK_RETRIES} 次）`
         : phase === 'error'
         ? message
         : message
