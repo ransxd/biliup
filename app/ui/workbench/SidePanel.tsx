@@ -83,7 +83,8 @@ function MarkerRow({
   canEdit: boolean
   editReason: string
   onSeek: (m: Marker) => void
-  onSelect: (m: Marker) => void
+  /** 窄屏没有选段，不给这个动作 */
+  onSelect?: (m: Marker) => void
 }) {
   const [renaming, setRenaming] = useState(false)
   const time = formatSessionTime(marker.at_ms)
@@ -125,15 +126,17 @@ function MarkerRow({
       </div>
       {renaming ? null : (
         <div className={styles.rowActions}>
-          <Tooltip content="按这个标记的默认范围建一个选段（入点、出点吸附到关键帧）">
-            <Button
-              size="small"
-              theme="borderless"
-              icon={<IconScissors />}
-              aria-label={`按 ${time} 的标记选段`}
-              onClick={() => onSelect(marker)}
-            />
-          </Tooltip>
+          {onSelect ? (
+            <Tooltip content="按这个标记的默认范围建一个选段（入点、出点吸附到关键帧）">
+              <Button
+                size="small"
+                theme="borderless"
+                icon={<IconScissors />}
+                aria-label={`按 ${time} 的标记选段`}
+                onClick={() => onSelect(marker)}
+              />
+            </Tooltip>
+          ) : null}
           <Tooltip content={canEdit ? '改名' : editReason}>
             <Button
               size="small"
@@ -306,7 +309,7 @@ export function SidePanel({
               canEdit={canEdit}
               editReason={editReason}
               onSeek={onSeekMarker}
-              onSelect={onSelectMarker}
+              onSelect={compact ? undefined : onSelectMarker}
             />
           ))}
         </ul>

@@ -22,9 +22,10 @@
 .aside {
   min-width: 0;
   position: sticky;
-  /* 页头（PageHeader）约 69 px 高，吸在它下面 */
+  /* 吸在页头（PageHeader，约 83 px）下面；高度再减去页面底部留白（40 px），
+     否则滚到底时网格区域会把右栏往上推到页头底下 */
   top: 84px;
-  max-height: calc(100vh - 104px);
+  max-height: calc(100vh - 124px);
   display: flex;
   flex-direction: column;
 }
@@ -109,6 +110,11 @@
   color: rgba(255, 255, 255, 0.88);
   font-size: 14px;
   line-height: 1.6;
+
+  /* 居中的弹性子项按内容宽度排版，长句不设上限会冲出画面 */
+  & > span {
+    max-width: min(100%, 640px);
+  }
 }
 
 .stageOverlay {
@@ -335,6 +341,7 @@
   bottom: 0;
   width: 1.5px;
   background: currentColor;
+  opacity: 0.6;
 }
 .pin::after {
   content: '';
