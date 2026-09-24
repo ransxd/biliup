@@ -70,6 +70,8 @@ const JUMP_MS = 10_000
 const DETACH_AFTER_PAUSE_MS = 20_000
 /** 场次进行中时，详情（分段、时长）和细节条末尾的关键帧多久刷新一次 */
 const LIVE_REFRESH_MS = 3_000
+/** 刚开录时详情里已经有画面、盘上还没有（下载器写盘有缓冲），回看返回 404；隔这么久重试 */
+const NO_MEDIA_RETRY_MS = 3_000
 /** 手机宽度：只留播放器、标记按钮和标记列表 */
 const COMPACT_WIDTH = 760
 
@@ -206,6 +208,7 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
   }
   const [phase, setPhase] = useState<DvrPhase>('connecting')
   const [message, setMessage] = useState<string | null>(null)
+  const [errorStatus, setErrorStatus] = useState<number | null>(null)
   const [pos, setPos] = useState<number | null>(null)
   const [focus, setFocus] = useState<number | null>(null)
   const [muted, setMuted] = useState(false)
@@ -296,9 +299,10 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
     },
     []
   )
-  const onPhase = useCallback((p: DvrPhase, text?: string) => {
+  const onPhase = useCallback((p: DvrPhase, text?: string, status?: number) => {
     setPhase(p)
     setMessage(p === 'error' ? (text ?? '回看出错') : null)
+    setErrorStatus(p === 'error' ? (status ?? null) : null)
   }, [])
   // 响应结束：断流缺口 / 编码参数变化处从下一个可读分段接着放；没有下一段就停在这里
   const onEnded = (lastMs: number) => {
@@ -329,6 +333,17 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
     }, DETACH_AFTER_PAUSE_MS)
     return () => clearTimeout(timer)
   }, [modeKind, phase])
+
+  const recording = !!detail?.recording
+  const retryFrom = mode?.kind === 'dvr' && phase === 'error' && errorStatus === 404 && recording ? mode.from : null
+  useEffect(() => {
+    if (retryFrom === null) return
+    const timer = setTimeout(
+      () => setMode((m) => (m?.kind === 'dvr' ? { kind: 'dvr', from: retryFrom, nonce: m.nonce + 1 } : m)),
+      NO_MEDIA_RETRY_MS
+    )
+    return () => clearTimeout(timer)
+  }, [retryFrom])
 
   const playing = mode?.kind === 'live' || (mode?.kind === 'dvr' && (phase === 'playing' || phase === 'waiting'))
   const togglePlay = () => {
@@ -638,7 +653,9 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
     )
   } else {
     const overlay =
-      phase === 'error'
+      retryFrom !== null
+        ? '正在等第一段画面：录像还没写到盘上，3 秒后自动重试…'
+        : phase === 'error'
         ? message
         : message
           ? message

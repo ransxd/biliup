@@ -55,7 +55,8 @@ const DvrPlayer = forwardRef<
     type: 'flv' | 'mpegts'
     muted: boolean
     onPosition: (ms: number) => void
-    onPhase: (phase: DvrPhase, message?: string) => void
+    /** `status` 是服务端拒绝时的 HTTP 状态码 */
+    onPhase: (phase: DvrPhase, message?: string, status?: number) => void
     onEnded: (lastMs: number) => void
     onMutedChange: (muted: boolean) => void
   }
@@ -139,7 +140,7 @@ const DvrPlayer = forwardRef<
           .catch(() => '')
           .then((text) => {
             if (disposed) return
-            cb().onPhase('error', text.trim() || `回看失败（HTTP ${status}）`)
+            cb().onPhase('error', text.trim() || `回看失败（HTTP ${status}）`, status)
           })
       },
     }
