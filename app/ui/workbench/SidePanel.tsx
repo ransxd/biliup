@@ -492,7 +492,7 @@ function PublishStatus({ job, canSubmit }: { job: PublishJob; canSubmit: boolean
           : job.state === 'running'
             ? `${job.detail}${ratio !== null ? ` ${ratio}%` : ''}${parts}`
             : job.state === 'paused'
-              ? `已暂停${parts}：${job.error ?? ''}`
+              ? `已暂停${parts}：B 站提示上传太频繁，稍后点列表上方的「继续」`
               : `发布失败${parts}：${job.error ?? '原因未知'}`}
       </span>
       {ratio !== null ? <Progress percent={ratio} size="small" aria-label="发布进度" className={styles.clipProgress} /> : null}
@@ -524,6 +524,11 @@ function PublishStatus({ job, canSubmit }: { job: PublishJob; canSubmit: boolean
       </span>
     </div>
   )
+}
+
+/** 能勾选去集中发布：不在发布队列里，也还没发布过 */
+function pickable(clip: Clip, job: PublishJob | undefined) {
+  return !(job && job.state !== 'done') && clip.state !== 'published' && clip.state !== 'discarded'
 }
 
 function Published({ clip }: { clip: Clip }) {
@@ -600,7 +605,7 @@ function ClipRow({
       </span>
     </Tooltip>
   )
-  const selectable = !queued && clip.state !== 'published' && clip.state !== 'discarded'
+  const selectable = pickable(clip, job)
   return (
     <li className={styles.row} data-current={active || undefined} data-clip-state={clip.state}>
       {selecting ? (
@@ -834,6 +839,7 @@ export function SidePanel({
   const [selected, setSelected] = useState<Set<number>>(() => new Set())
   const [resuming, setResuming] = useState(false)
   const picked = clips.filter((c) => selected.has(c.id))
+  const pickableCount = clips.filter((c) => pickable(c, queue.byClip.get(c.id))).length
   const toggle = (c: Clip, on: boolean) =>
     setSelected((prev) => {
       const next = new Set(prev)
@@ -943,7 +949,7 @@ export function SidePanel({
             快速剪按关键帧切、不转码；精确剪用 ffmpeg 转码成 MP4，首尾对准选段。文件存在服务器的 clips 目录下。
             发布一律按转载投稿，同一时间只传一个稿件{running ? `（队列里还有 ${running} 个）` : ''}。
           </Text>
-          {!compact && clips.length > 1 ? (
+          {!compact && (selecting || pickableCount > 1) ? (
             <div className={styles.batchBar} role="toolbar" aria-label="集中发布">
               {selecting ? (
                 <>
