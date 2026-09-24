@@ -76,6 +76,12 @@ const NO_MEDIA_RETRY_MS = 3_000
 /** 手机宽度：只留播放器、标记按钮和标记列表 */
 const COMPACT_WIDTH = 760
 
+/**
+ * 进行中、或还没有能播的画面时定时刷新详情。放在组件外：SWR 按引用比较这个选项，
+ * 每次渲染换一个新函数会重置计时器，回看时每秒几次的重渲染会让它永远等不到点。
+ */
+const detailRefreshInterval = (d?: SessionDetail) => (!d || d.recording || !hasPlayableMedia(d) ? LIVE_REFRESH_MS : 0)
+
 type Mode =
   | { kind: 'dvr'; from: number; nonce: number }
   | { kind: 'live' }
@@ -153,7 +159,7 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
     isLoading: detailLoading,
     mutate: reloadDetail,
   } = useSWR<SessionDetail>(sessionUrl(sessionId), fetcher, {
-    refreshInterval: (d) => (!d || d.recording || !hasPlayableMedia(d) ? LIVE_REFRESH_MS : 0),
+    refreshInterval: detailRefreshInterval,
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   })
