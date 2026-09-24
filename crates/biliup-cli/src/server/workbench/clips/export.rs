@@ -13,6 +13,8 @@ use super::plan::{self, Plan, PlanError};
 use super::remux;
 use super::{Clip, Exported, Mode};
 use crate::server::infrastructure::connection_pool::ConnectionPool;
+use crate::server::workbench::dvr::{self, flv};
+use crate::server::workbench::index::Container;
 use crate::server::workbench::recorder::now_ms;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -33,6 +35,12 @@ pub const PRECISE_SLOTS: usize = 1;
 pub const WAIT_TIMEOUT: Duration = Duration::from_secs(120);
 /// ffmpeg 报错时保留的 stderr 末尾长度。
 const STDERR_TAIL: usize = 4096;
+/// 国内平台在 FLV 里写 HEVC 用的视频 codec id（不是 Enhanced FLV），官方 FFmpeg 不认。
+const FLV_CODEC_LEGACY_HEVC: u8 = 12;
+/// 判断编码时读文件开头多少字节：够装下文件头、`onMetaData` 和序列头。
+const CODEC_SNIFF_BYTES: usize = 512 * 1024;
+const LEGACY_HEVC_HINT: &str = "这段录像是国内平台在 FLV 里写的 HEVC（codec id 12），服务器上的 FFmpeg 读不了；\
+     换一个支持它的 FFmpeg（配置里的 ffmpeg_path），或者用快速剪、下载源格式";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Progress {
@@ -106,6 +114,25 @@ fn ffmpeg_message(stderr: &str, status: Option<std::process::ExitStatus>) -> Str
         _ if last.is_empty() => "FFmpeg 转码失败".into(),
         _ => format!("FFmpeg 转码失败：{last}"),
     }
+}
+
+/// `path` 是不是用 codec id 12 写 HEVC 的 FLV。只在 ffmpeg 失败后用来解释原因：打过补丁的 ffmpeg 能读。
+pub(super) async fn legacy_hevc_flv(path: &Path) -> bool {
+    let Ok(mut file) = tokio::fs::File::open(path).await else {
+        return false;
+    };
+    let Ok(region) = dvr::read_at(&mut file, 0, CODEC_SNIFF_BYTES).await else {
+        return false;
+    };
+    flv::Header::parse(&region).is_ok_and(|header| {
+        header.sequence_headers.iter().any(|tag| {
+            tag.tag_type == flv::TAG_VIDEO
+                && tag
+                    .body()
+                    .first()
+                    .is_some_and(|b| b & 0x0f == FLV_CODEC_LEGACY_HEVC)
+        })
+    })
 }
 
 async fn ffmpeg_unavailable() -> Option<String> {
@@ -377,6 +404,9 @@ impl ClipExports {
         let (fed, (), stderr) = tokio::join!(feed, watch, errors);
         let status = child.wait().await.ok();
         if !status.is_some_and(|s| s.success()) {
+            if plan.container == Container::Flv && legacy_hevc_flv(&plan.pieces[0].path).await {
+                return Err(format!("精确剪失败：{LEGACY_HEVC_HINT}"));
+            }
             return Err(ffmpeg_message(&stderr, status));
         }
         if let Err(e) = fed
@@ -450,6 +480,11 @@ impl ClipExports {
             .map_err(|e| DownloadError::Ffmpeg(format!("启动 FFmpeg 失败：{e}")))?;
         if !output.status.success() {
             let _ = tokio::fs::remove_file(&part).await;
+            if legacy_hevc_flv(&source).await {
+                return Err(DownloadError::Ffmpeg(format!(
+                    "转成 MP4 失败：{LEGACY_HEVC_HINT}"
+                )));
+            }
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(DownloadError::Ffmpeg(
                 ffmpeg_message(&stderr, Some(output.status)).replace("转码", "转封装"),

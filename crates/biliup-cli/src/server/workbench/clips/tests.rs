@@ -484,3 +484,23 @@ async fn ts_and_fmp4_sessions_plan_in_their_own_containers() {
     assert_eq!(plan.pieces[0].to, frames[2].1);
     drop(dir);
 }
+
+#[tokio::test]
+async fn recognizes_flv_that_carries_hevc_as_codec_12() {
+    let dir = tempfile::tempdir().unwrap();
+    let flv = |codec: u8| {
+        let body = [0x10 | codec, 0, 0, 0, 0, 1, 2, 3];
+        let mut out = b"FLV\x01\x01\x00\x00\x00\x09\x00\x00\x00\x00".to_vec();
+        out.push(9);
+        out.extend_from_slice(&(body.len() as u32).to_be_bytes()[1..]);
+        out.extend_from_slice(&[0; 7]);
+        out.extend_from_slice(&body);
+        out.extend_from_slice(&(11 + body.len() as u32).to_be_bytes());
+        out
+    };
+    let hevc = write(dir.path(), "hevc.flv", &flv(12));
+    let avc = write(dir.path(), "avc.flv", &flv(7));
+    assert!(export::legacy_hevc_flv(&hevc).await);
+    assert!(!export::legacy_hevc_flv(&avc).await);
+    assert!(!export::legacy_hevc_flv(&dir.path().join("missing.flv")).await);
+}
