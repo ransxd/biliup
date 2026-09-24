@@ -220,6 +220,15 @@ pub(crate) async fn upload_single_file(
     file_path: &Path,
     context: &UploadContext,
 ) -> AppResult<Video> {
+    upload_single_file_with_progress(file_path, context, |_| {}).await
+}
+
+/// 同 [`upload_single_file`]，每读出一块交给上传时用这块的字节数回调 `progress`。
+pub(crate) async fn upload_single_file_with_progress(
+    file_path: &Path,
+    context: &UploadContext,
+    progress: impl Fn(usize) + Send + Sync,
+) -> AppResult<Video> {
     let video_path = file_path;
     let UploadContext {
         bilibili,
@@ -251,6 +260,7 @@ pub(crate) async fn upload_single_file(
             vs.map(|vs| {
                 let chunk = vs?;
                 let len = chunk.len();
+                progress(len);
                 Ok((chunk, len))
             })
         })
@@ -372,7 +382,7 @@ pub(crate) async fn complete_byte_stream(uploaded: UploadedStream) -> AppResult<
 // 前端表单留空时会把 copyright_source 提交为空字符串 `Some("")`，
 // 若直接透传则 B 站接口收到空 source，且不会回退到直播间地址。
 // 这里把 None 以及空白字符串都视作「未填写」，统一回退到直播间地址，
-fn resolve_source(copyright_source: Option<&str>, fallback_url: &str) -> String {
+pub(crate) fn resolve_source(copyright_source: Option<&str>, fallback_url: &str) -> String {
     match copyright_source.map(str::trim) {
         Some(s) if !s.is_empty() => s.to_string(),
         _ => fallback_url.to_string(),
@@ -407,8 +417,25 @@ pub(crate) async fn build_studio(
     videos: Vec<Video>,
     recorder: &Recorder,
 ) -> AppResult<Studio> {
-    // 使用 Builder 模式简化构建
-    let mut studio: Studio = Studio::builder()
+    let mut studio = studio_from_template(upload_config, videos, recorder);
+    // 处理封面上传
+    if !studio.cover.is_empty()
+        && let Ok(c) = &std::fs::read(&studio.cover).inspect_err(|e| error!(e=?e))
+        && let Ok(url) = bilibili.cover_up(c).await.inspect_err(|e| error!(e=?e))
+    {
+        studio.cover = url;
+    };
+
+    Ok(studio)
+}
+
+/// 按上传模板拼出稿件；`cover` 还是本地路径，由调用方上传。
+pub(crate) fn studio_from_template(
+    upload_config: &UploadStreamer,
+    videos: Vec<Video>,
+    recorder: &Recorder,
+) -> Studio {
+    Studio::builder()
         .desc(recorder.format(&upload_config.description.clone().unwrap_or_default()))
         .maybe_dtime(scheduled_publish_ts(upload_config.dtime, now_unix()))
         .maybe_copyright(upload_config.copyright)
@@ -436,16 +463,7 @@ pub(crate) async fn build_studio(
             serde_json::from_str(&upload_config.extra_fields.clone().unwrap_or_default())
                 .unwrap_or_default(), // 处理额外字段
         )
-        .build();
-    // 处理封面上传
-    if !studio.cover.is_empty()
-        && let Ok(c) = &std::fs::read(&studio.cover).inspect_err(|e| error!(e=?e))
-        && let Ok(url) = bilibili.cover_up(c).await.inspect_err(|e| error!(e=?e))
-    {
-        studio.cover = url;
-    };
-
-    Ok(studio)
+        .build()
 }
 
 pub async fn execute_postprocessor(video_paths: Vec<PathBuf>, ctx: &Context) -> AppResult<()> {
