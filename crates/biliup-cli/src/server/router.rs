@@ -1,6 +1,9 @@
 use crate::server::api::bilibili_endpoints::{
     archive_pre_endpoint, get_user_archives_endpoint, get_user_profile_endpoint,
 };
+use crate::server::api::clips::{
+    create_clip, delete_clip, download_clip, export_clip, get_clip, list_clips, update_clip,
+};
 use crate::server::api::endpoints::{
     add_upload_streamer_endpoint, add_user_endpoint, delete_streamers_endpoint,
     delete_template_endpoint, delete_user_endpoint, get_configuration, get_qrcode, get_status,
@@ -15,11 +18,11 @@ use crate::server::api::live_preview::{
 };
 use crate::server::api::live_rates::{get_live_rates, ws_live_rates};
 use crate::server::api::markers::{create_marker, delete_marker, list_markers, update_marker};
+use crate::server::api::session_retention::patch_session;
 use crate::server::api::sessions::{
     get_session, get_session_danmaku_density, get_session_keyframes, get_session_media,
     list_sessions,
 };
-use crate::server::api::session_retention::patch_session;
 use crate::server::infrastructure::service_register::ServiceRegister;
 use axum::Router;
 use axum::body::Body;
@@ -76,6 +79,15 @@ pub fn router(service_register: ServiceRegister) -> Router<()> {
             "/v1/sessions/{id}/markers/{mid}",
             patch(update_marker).delete(delete_marker),
         )
+        // 切片工作台：切片与导出（只按场次 id、切片 id 寻址）
+        .route("/v1/sessions/{id}/clips", get(list_clips).post(create_clip))
+        .route(
+            "/v1/sessions/{id}/clips/{cid}",
+            patch(update_clip).delete(delete_clip),
+        )
+        .route("/v1/clips/{cid}", get(get_clip))
+        .route("/v1/clips/{cid}/export", post(export_clip))
+        .route("/v1/clips/{cid}/download", get(download_clip))
         // 配置管理路由
         .route(
             "/v1/configuration",

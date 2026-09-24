@@ -163,6 +163,13 @@ pub fn required_permission(method: &Method, route: &str, raw_path: &str) -> Opti
         {
             ClipEdit
         }
+        "/v1/sessions/{id}/clips" | "/v1/clips/{cid}" | "/v1/clips/{cid}/download" if get => {
+            FileView
+        }
+        "/v1/sessions/{id}/clips" | "/v1/clips/{cid}/export" if method == Method::POST => ClipEdit,
+        "/v1/sessions/{id}/clips/{cid}" if method == Method::PATCH || method == Method::DELETE => {
+            ClipEdit
+        }
         "/v1/configuration" if get => ConfigView,
         "/v1/configuration" if method == Method::PUT => ConfigEdit,
         "/v1/streamer-info" | "/v1/streamer-info/files/{id}" if get => StreamerView,
