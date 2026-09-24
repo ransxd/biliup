@@ -8,8 +8,10 @@
 //! - [`danmaku`]：按场次时间统计分段旁弹幕 XML 的密度；
 //! - [`locate`] / [`session_keyframes`]：按场次时间找到可以落刀 / 起播的分段与字节偏移；
 //! - [`recover`]：启动时收尾上次异常退出留下的 `recording` 分段与没结束的场次；
-//! - [`retention`]：被引用就推迟删除、每分钟一次的清理任务、磁盘水位兜底。
+//! - [`retention`]：被引用就推迟删除、每分钟一次的清理任务、磁盘水位兜底；
+//! - [`clips`]：切片与导出（快速剪 / 精确剪）。
 
+pub mod clips;
 pub mod danmaku;
 pub mod dvr;
 pub mod index;
