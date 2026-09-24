@@ -1,4 +1,4 @@
-//! 切片工作台的场次接口：场次列表 / 详情、可落刀位置、DVR 回看流。
+//! 切片工作台的场次接口：场次列表 / 详情、可落刀位置、DVR 回看流、弹幕密度。
 //!
 //! 全部只按场次 id 与场次时间（毫秒）寻址，不接受文件路径。
 //! 回看流是 chunked 响应，没有 `Content-Length`，`--auth` 下会话失效时由访问控制层截断。
@@ -6,7 +6,7 @@
 use crate::server::infrastructure::connection_pool::ConnectionPool;
 use crate::server::workbench::dvr::{self, OpenError};
 use crate::server::workbench::store::{self, SegmentRow, SegmentState, SessionListRow};
-use crate::server::workbench::{live, segment_index, session_keyframes};
+use crate::server::workbench::{danmaku, live, segment_index, session_keyframes};
 use axum::Json;
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -297,6 +297,64 @@ pub async fn get_session_keyframes(
     }
 }
 
+/// 弹幕密度的桶宽（毫秒）缺省值与范围；桶数超过上限时自动放宽桶宽。
+pub const DEFAULT_DENSITY_BUCKET_MS: i64 = 10_000;
+pub const MIN_DENSITY_BUCKET_MS: i64 = 1_000;
+pub const MAX_DENSITY_BUCKETS: i64 = 4_000;
+
+#[derive(Debug, Default, Deserialize)]
+pub struct DensityQuery {
+    pub bucket_ms: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DensityView {
+    pub bucket_ms: i64,
+    /// 第 i 个是场次时间 `[i * bucket_ms, (i + 1) * bucket_ms)` 内的弹幕条数
+    pub counts: Vec<u32>,
+    pub total: u64,
+    /// 读到了弹幕文件的分段数；录制中的分段关段后才有弹幕文件
+    pub segments: u32,
+}
+
+/// `GET /v1/sessions/{id}/danmaku-density?bucket_ms=`：写完的分段旁弹幕 XML 按场次时间分桶的条数。
+pub async fn get_session_danmaku_density(
+    State(pool): State<ConnectionPool>,
+    Path(id): Path<i64>,
+    Query(query): Query<DensityQuery>,
+) -> Response {
+    let duration_ms = match store::session_summary(&pool, id).await {
+        Ok(Some(row)) => SessionSummary::from(row).duration_ms,
+        Ok(None) => return not_found(),
+        Err(e) => return internal(e),
+    };
+    let rows = match store::session_segments(&pool, id).await {
+        Ok(rows) => rows,
+        Err(e) => return internal(e),
+    };
+    let duration_ms = rows
+        .iter()
+        .filter(|r| r.state == SegmentState::Finished)
+        .filter_map(|r| r.end_ms)
+        .fold(duration_ms, i64::max);
+    let bucket_ms = query
+        .bucket_ms
+        .unwrap_or(DEFAULT_DENSITY_BUCKET_MS)
+        .max(MIN_DENSITY_BUCKET_MS)
+        .max((duration_ms + MAX_DENSITY_BUCKETS - 1) / MAX_DENSITY_BUCKETS);
+    match tokio::task::spawn_blocking(move || danmaku::density(&rows, duration_ms, bucket_ms)).await
+    {
+        Ok(d) => Json(DensityView {
+            bucket_ms: d.bucket_ms,
+            counts: d.counts,
+            total: d.total,
+            segments: d.segments,
+        })
+        .into_response(),
+        Err(e) => internal(e),
+    }
+}
+
 #[derive(Debug, Default, Deserialize)]
 pub struct MediaQuery {
     /// 场次时间（毫秒）；从不晚于它的最近关键帧起播。缺省 0。
@@ -454,6 +512,10 @@ mod tests {
             .route("/v1/sessions/{id}", get(get_session))
             .route("/v1/sessions/{id}/keyframes", get(get_session_keyframes))
             .route("/v1/sessions/{id}/media", get(get_session_media))
+            .route(
+                "/v1/sessions/{id}/danmaku-density",
+                get(get_session_danmaku_density),
+            )
             .with_state(pool.clone())
             .route_layer(from_fn(require_permission))
             .merge(crate::server::api::auth::router())
@@ -685,6 +747,64 @@ mod tests {
         drop((file_tap, tap));
     }
 
+    #[tokio::test]
+    async fn viewer_reads_danmaku_density_of_finished_segments() {
+        let f = fixture().await;
+        let s = f.session;
+        let uri = format!("/v1/sessions/{s}/danmaku-density");
+        let response = get_as(&f.app, None, &uri).await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let viewer = login(&f.app, "ro", "viewer-password").await;
+
+        let empty = json(get_as(&f.app, Some(&viewer), &uri).await).await;
+        assert_eq!(empty["segments"], 0, "录制中的分段还没有弹幕文件");
+        assert_eq!(empty["total"], 0);
+
+        let xml = f.dir.path().join("done.xml");
+        std::fs::write(
+            &xml,
+            r#"<i><d p="0.2,1,25,1,0,0,1,0">a</d><d p="1.4,1">b</d><d p="1.9,1">c</d></i>"#,
+        )
+        .unwrap();
+        let path = f.dir.path().join("done.flv");
+        std::fs::write(&path, b"").unwrap();
+        let path = path.to_string_lossy().into_owned();
+        let id = store::insert_segment(&f.pool, s, &path, "flv", 10_000, 7_000)
+            .await
+            .unwrap();
+        store::finish_segment(
+            &f.pool,
+            id,
+            &store::FinishedSegment {
+                path,
+                state: SegmentState::Finished,
+                end_ms: 12_000,
+                bytes: Some(0),
+                index_path: None,
+                danmaku_path: Some(xml.to_string_lossy().into_owned()),
+            },
+        )
+        .await
+        .unwrap();
+
+        let uri = format!("/v1/sessions/{s}/danmaku-density?bucket_ms=1");
+        let d = json(get_as(&f.app, Some(&viewer), &uri).await).await;
+        assert_eq!(d["bucket_ms"], MIN_DENSITY_BUCKET_MS, "桶宽有下限");
+        assert_eq!(d["segments"], 1);
+        assert_eq!(d["total"], 3);
+        let counts: Vec<u64> = d["counts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c.as_u64().unwrap())
+            .collect();
+        assert_eq!(counts.len(), 12);
+        assert_eq!(&counts[10..], [1, 2]);
+
+        let response = get_as(&f.app, Some(&viewer), "/v1/sessions/999/danmaku-density").await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
     /// 四条场次路由的要求都由策略层按路由表给出：只读接口要 `file.view`、回看流要 `preview.view`，
     /// 三个角色都满足；表里没登记的方法按默认拒绝只给超管。
     #[test]
@@ -704,6 +824,11 @@ mod tests {
                 "/v1/sessions/{id}/media",
                 "/v1/sessions/1/media",
                 Permission::PreviewView,
+            ),
+            (
+                "/v1/sessions/{id}/danmaku-density",
+                "/v1/sessions/1/danmaku-density",
+                Permission::FileView,
             ),
         ] {
             let requirement = RouteRequirement::of(&Method::GET, route, raw);

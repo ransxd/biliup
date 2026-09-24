@@ -16,7 +16,8 @@ use crate::server::api::live_preview::{
 use crate::server::api::live_rates::{get_live_rates, ws_live_rates};
 use crate::server::api::markers::{create_marker, delete_marker, list_markers, update_marker};
 use crate::server::api::sessions::{
-    get_session, get_session_keyframes, get_session_media, list_sessions,
+    get_session, get_session_danmaku_density, get_session_keyframes, get_session_media,
+    list_sessions,
 };
 use crate::server::infrastructure::service_register::ServiceRegister;
 use axum::Router;
@@ -61,6 +62,10 @@ pub fn router(service_register: ServiceRegister) -> Router<()> {
         .route("/v1/sessions/{id}", get(get_session))
         .route("/v1/sessions/{id}/keyframes", get(get_session_keyframes))
         .route("/v1/sessions/{id}/media", get(get_session_media))
+        .route(
+            "/v1/sessions/{id}/danmaku-density",
+            get(get_session_danmaku_density),
+        )
         // 切片工作台：看直播时打的标记（只按场次 id、标记 id 寻址）
         .route(
             "/v1/sessions/{id}/markers",
