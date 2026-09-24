@@ -639,6 +639,7 @@
   z-index: 1;
 }
 .density polygon {
-  fill: var(--semi-color-warning);
-  opacity: 0.45;
+  /* 与标记针（琥珀色）、选段（橙色）区分开 */
+  fill: rgb(var(--semi-violet-5));
+  opacity: 0.35;
 }
