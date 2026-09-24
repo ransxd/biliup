@@ -1,5 +1,6 @@
 'use client'
-import useSWR, { mutate } from 'swr'
+import { useState } from 'react'
+import useSWR, { mutate, type SWRConfiguration } from 'swr'
 import { API_BASE, fetcher, handleResponse } from './api-streamer'
 import { ReportedError } from './markers'
 
@@ -53,17 +54,28 @@ export const clipUrl = (id: number) => `/v1/clips/${id}`
 export const downloadUrl = (id: number, format: 'source' | 'mp4') =>
   `${API_BASE}/v1/clips/${id}/download?format=${format}`
 
-/** 导出中每秒刷新一次；放在组件外，SWR 按引用比较这个选项 */
 const listRefresh = (data?: { clips: Clip[] }) => (data?.clips.some((c) => c.state === 'exporting') ? 1000 : 0)
 const oneRefresh = (clip?: Clip) => (!clip || clip.state === 'exporting' ? 1000 : 0)
 
+/**
+ * 按最新数据决定轮询间隔（导出中每秒一次）。不能把函数直接交给 SWR 的 `refreshInterval`：函数返回 0 后
+ * SWR 的定时器就不再续期，之后开始的导出不会被轮询到；传数值时数值一变 SWR 会重新计时。
+ */
+function usePolled<T>(key: string, interval: (data?: T) => number, config?: SWRConfiguration<T>) {
+  const [ms, setMs] = useState(0)
+  const swr = useSWR<T>(key, fetcher, { ...config, refreshInterval: ms })
+  const wanted = interval(swr.data)
+  if (wanted !== ms) setMs(wanted)
+  return swr
+}
+
 export function useSessionClips(sessionId: number) {
-  return useSWR<{ clips: Clip[] }>(clipsUrl(sessionId), fetcher, { refreshInterval: listRefresh })
+  return usePolled(clipsUrl(sessionId), listRefresh)
 }
 
 /** 单个切片；导出中轮询，结束后停 */
 export function useClip(id: number) {
-  return useSWR<Clip>(clipUrl(id), fetcher, { refreshInterval: oneRefresh, revalidateOnFocus: false })
+  return usePolled(clipUrl(id), oneRefresh, { revalidateOnFocus: false })
 }
 
 export function isMp4(clip: Clip): boolean {
