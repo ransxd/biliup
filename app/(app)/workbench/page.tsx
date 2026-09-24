@@ -2,7 +2,7 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
-import { Button, Empty, Spin, Tag, Toast, Tooltip, Typography } from '@douyinfe/semi-ui'
+import { Button, Empty, Spin, Switch, Tag, Toast, Tooltip, Typography } from '@douyinfe/semi-ui'
 import {
   IconArrowLeft,
   IconChevronLeft,
@@ -50,7 +50,9 @@ import {
   sessionUrl,
   unavailableIn,
 } from '@/app/lib/sessions'
-import { addDraft, type ClipDraft, updateDraft, useClipDrafts } from '@/app/lib/clip-drafts'
+import { useClipDrafts } from '@/app/lib/clip-drafts'
+import { type Clip, type ClipMode, createClip, updateClip, useFfmpeg, useSessionClips } from '@/app/lib/clips'
+import { useBoolPref } from '@/app/lib/use-local-pref'
 import { LivePreviewPlayer } from '@/app/ui/LivePreview'
 import { isTyping, showMarkerToast } from '@/app/ui/MarkerControls'
 import DvrPlayer, { type DvrHandle, type DvrPhase } from '@/app/ui/workbench/DvrPlayer'
@@ -146,9 +148,11 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
   const router = useRouter()
   const { can, isLoading: meLoading } = useMe()
   const canEdit = can('clip.edit')
+  const canDownload = can('file.view')
   const editReason = meLoading
     ? '正在读取权限…'
-    : '只读观察者不能改标记：需要 clip.edit 权限，请让管理员把你的角色改成操作员'
+    : '只读观察者不能改标记和切片：需要 clip.edit 权限，请让管理员把你的角色改成操作员'
+  const ffmpeg = useFfmpeg()
   const width = useWindowWidth()
   const compact = width < COMPACT_WIDTH
 
@@ -177,7 +181,9 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
     fetcher,
     { refreshInterval: 10_000 }
   )
-  const drafts = useClipDrafts(sessionId)
+  const { data: clipData, error: clipsError, isLoading: clipsLoading } = useSessionClips(sessionId)
+  const clips = useMemo(() => clipData?.clips ?? [], [clipData])
+  const legacyDrafts = useClipDrafts(sessionId)
 
   const segments = useMemo(() => detail?.segments ?? [], [detail])
   const gaps = useMemo(() => detail?.gaps ?? [], [detail])
@@ -260,14 +266,18 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
 
   // ---------- 选段 ----------
   const [selection, setSelection] = useState<Selection>({ in: null, out: null })
-  const [activeDraft, setActiveDraft] = useState<string | null>(null)
+  const [activeClip, setActiveClip] = useState<number | null>(null)
+  /** 选段是按哪个标记建的；存成切片时带上 */
+  const [selectionMarker, setSelectionMarker] = useState<number | null>(null)
+  const [snap, setSnap] = useBoolPref('biliup.workbench.snap', true)
+  const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<PanelTab>('markers')
   const [pickedMarker, setPickedMarker] = useState<number | null>(null)
 
   const blocked = useCallback((segment: SegmentView) => {
     Toast.warning({
       id: 'segment-blocked',
-      content: `这一段录像${segment.state === 'missing' ? '文件已经不在了' : '已被清理'}，不能回看，也不能选进选段`,
+      content: `这一段录像${segment.state === 'missing' ? '文件已经不在了' : '已被清理'}，不能回看，也不能剪进切片`,
       duration: 3,
     })
   }, [])
@@ -434,7 +444,8 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
 
   const setPoint = (which: 'in' | 'out') => {
     const p = current()
-    const value = which === 'in' ? floorPoint(points, p) : ceilPoint(points, p)
+    const exact = Math.round(Math.min(Math.max(0, p), duration))
+    const value = !snap ? exact : which === 'in' ? floorPoint(points, p) : ceilPoint(points, p)
     if (value === null) {
       Toast.info({
         id: 'no-cut',
@@ -460,37 +471,57 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
     const n = gapsIn(gaps, from, to)
     return n ? `跨过 ${n} 个断流缺口，导出时如实拼接，不补黑帧` : null
   }
-  const draftWarning = (d: ClipDraft) => selectionProblem(d.in_ms, d.out_ms) ?? selectionNote(d.in_ms, d.out_ms)
+  const clipWarning = (c: Clip) => selectionProblem(c.in_ms, c.out_ms) ?? selectionNote(c.in_ms, c.out_ms)
   const selProblem = selectionProblem(selection.in, selection.out)
-  const loadedDraft = drafts.find((d) => d.id === activeDraft) ?? null
-  const draftChanged =
-    !!loadedDraft && (loadedDraft.in_ms !== selection.in || loadedDraft.out_ms !== selection.out)
+  const loadedClip = clips.find((c) => c.id === activeClip) ?? null
+  const clipChanged = !!loadedClip && (loadedClip.in_ms !== selection.in || loadedClip.out_ms !== selection.out)
+  const canSave = canEdit && selection.in !== null && selection.out !== null && !selProblem
 
-  const saveDraft = (asNew: boolean) => {
+  /** 存为新切片（`exportMode` 给了就建好立即导出），或把选段改动写回载入的切片 */
+  const saveClip = async (asNew: boolean, exportMode?: ClipMode) => {
     if (selection.in === null || selection.out === null) return
+    if (!canEdit) {
+      Toast.warning({ id: 'clip-disabled', content: editReason, duration: 3 })
+      return
+    }
     if (selProblem) {
       Toast.warning({ content: selProblem, duration: 3 })
       return
     }
-    if (!asNew && loadedDraft) {
-      updateDraft(sessionId, loadedDraft.id, { in_ms: selection.in, out_ms: selection.out })
-      Toast.success({ content: '选段已更新', duration: 2 })
-      return
+    setSaving(true)
+    try {
+      if (!asNew && loadedClip) {
+        const updated = await updateClip(loadedClip, { in_ms: selection.in, out_ms: selection.out })
+        Toast.success({
+          content: loadedClip.file_name && !updated.file_name ? '切片范围已更新，之前导出的文件已作废，请重新导出' : '切片范围已更新',
+          duration: 3,
+        })
+        return
+      }
+      const created = await createClip(sessionId, {
+        in_ms: selection.in,
+        out_ms: selection.out,
+        marker_id: selectionMarker,
+        export: exportMode,
+      })
+      setActiveClip(created.id)
+      setTab('clips')
+      Toast.success({
+        content: `已存为切片（${formatSpan(created.out_ms - created.in_ms)}）${exportMode ? '，正在快速剪' : ''}`,
+        duration: 2,
+      })
+    } catch (e) {
+      if (!(e instanceof ReportedError)) Toast.error({ content: `保存切片失败：${errorText(e)}`, duration: 4 })
+    } finally {
+      setSaving(false)
     }
-    const created = addDraft(sessionId, { in_ms: selection.in, out_ms: selection.out })
-    if (!created) {
-      Toast.warning({ content: '这一场的选段太多了，先删掉一些不用的', duration: 3 })
-      return
-    }
-    setActiveDraft(created.id)
-    setTab('drafts')
-    Toast.success({ content: `已存为选段（${formatSpan(created.out_ms - created.in_ms)}）`, duration: 2 })
   }
 
-  const loadDraft = (d: ClipDraft) => {
-    setActiveDraft(d.id)
-    setSelection({ in: d.in_ms, out: d.out_ms })
-    seek(d.in_ms)
+  const loadClip = (c: Clip) => {
+    setActiveClip(c.id)
+    setSelectionMarker(c.marker_id)
+    setSelection({ in: c.in_ms, out: c.out_ms })
+    seek(c.in_ms)
   }
 
   const pickMarker = (m: Marker) => {
@@ -503,19 +534,27 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
   // 按标记的默认范围选段：范围两端不一定在当前细节条里，单独取一次那附近的关键帧
   const selectFromMarker = async (m: Marker) => {
     const a = Math.max(0, m.at_ms - m.lookback_ms)
-    const b = m.at_ms + m.lookahead_ms
+    const b = Math.min(m.at_ms + m.lookahead_ms, duration)
     try {
-      const list: KeyframeList = await fetcher(keyframesUrl(sessionId, a - 30_000, b + 30_000))
-      const near = cutPoints(list.keyframes, segments, a - 30_000, b + 30_000)
-      const inMs = floorPoint(near, a) ?? near[0] ?? null
-      const outMs = ceilPoint(near, b === a ? b + 1 : b) ?? near[near.length - 1] ?? null
+      let inMs: number | null = a
+      let outMs: number | null = b
+      if (snap) {
+        const list: KeyframeList = await fetcher(keyframesUrl(sessionId, a - 30_000, b + 30_000))
+        const near = cutPoints(list.keyframes, segments, a - 30_000, b + 30_000)
+        inMs = floorPoint(near, a) ?? near[0] ?? null
+        outMs = ceilPoint(near, b <= a ? a + 1 : b) ?? near[near.length - 1] ?? null
+      }
       if (inMs === null || outMs === null || outMs <= inMs) {
-        Toast.warning({ content: '这个标记附近没有可以落刀的关键帧', duration: 3 })
+        Toast.warning({
+          content: snap ? '这个标记附近没有可以落刀的关键帧' : '这个标记的默认范围是空的，请手动选入点、出点',
+          duration: 3,
+        })
         return
       }
       const problem = selectionProblem(inMs, outMs)
       if (problem) Toast.warning({ content: problem, duration: 3 })
-      setActiveDraft(null)
+      setActiveClip(null)
+      setSelectionMarker(m.id)
       setSelection({ in: inMs, out: outMs })
       setPickedMarker(m.id)
       seek(inMs)
@@ -886,6 +925,7 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
                 truncated={!!keyframeData?.truncated}
                 onSeek={seek}
                 onBlocked={blocked}
+                snap={snap}
                 onChange={setSelection}
                 onPickMarker={pickMarker}
               />
@@ -904,29 +944,54 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
                     {selProblem ? ` · ${selProblem}` : selectionNote(selection.in, selection.out) ? ` · ${selectionNote(selection.in, selection.out)}` : ''}
                   </span>
                 ) : (
-                  <span className={styles.selInfo}>入点、出点吸附到关键帧：入点取之前最近的，出点取之后最近的</span>
+                  <span className={styles.selInfo}>
+                    {snap
+                      ? '入点、出点吸附到关键帧：入点取之前最近的，出点取之后最近的；快速剪正好切在这里'
+                      : '不吸附：入点、出点就是当前画面的时刻；精确剪按这里转码，快速剪会放宽到最近的关键帧'}
+                  </span>
                 )}
+                <label className={styles.snapToggle}>
+                  <Switch size="small" checked={snap} onChange={setSnap} aria-label="入点、出点吸附到关键帧" />
+                  吸附关键帧
+                </label>
                 <span className={styles.selActions}>
-                  {draftChanged ? (
-                    <Button onClick={() => saveDraft(false)} disabled={!!selProblem}>
-                      更新这个选段
-                    </Button>
+                  {clipChanged ? (
+                    <Tooltip content={canEdit ? '把新的入点、出点写回载入的切片；已导出的文件会作废' : editReason}>
+                      <span className={styles.inlineWrap}>
+                        <Button onClick={() => saveClip(false)} disabled={!!selProblem || !canEdit || saving}>
+                          更新这个切片
+                        </Button>
+                      </span>
+                    </Tooltip>
                   ) : null}
-                  <Button
-                    theme="solid"
-                    icon={<IconScissors />}
-                    disabled={selection.in === null || selection.out === null || !!selProblem || (!!loadedDraft && !draftChanged)}
-                    onClick={() => saveDraft(true)}
-                  >
-                    {draftChanged ? '另存为新选段' : '存为选段'}
-                  </Button>
+                  <Tooltip content={canEdit ? '存到服务器，之后在右侧「切片」里导出' : editReason}>
+                    <span className={styles.inlineWrap}>
+                      <Button
+                        theme="solid"
+                        icon={<IconScissors />}
+                        loading={saving}
+                        disabled={!canSave || (!!loadedClip && !clipChanged)}
+                        onClick={() => saveClip(true)}
+                      >
+                        {clipChanged ? '另存为新切片' : '存为切片'}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <Tooltip content={canEdit ? '存为切片并立即快速剪（按关键帧切，不转码）' : editReason}>
+                    <span className={styles.inlineWrap}>
+                      <Button disabled={!canSave || (!!loadedClip && !clipChanged) || saving} onClick={() => saveClip(true, 'quick')}>
+                        存并快速剪
+                      </Button>
+                    </span>
+                  </Tooltip>
                   <Button
                     theme="borderless"
                     type="tertiary"
                     disabled={selection.in === null && selection.out === null}
                     onClick={() => {
                       setSelection({ in: null, out: null })
-                      setActiveDraft(null)
+                      setActiveClip(null)
+                      setSelectionMarker(null)
                     }}
                   >
                     清除
@@ -944,15 +1009,20 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
             markers={markers}
             markersLoading={markersLoading}
             markersError={!!markersError}
-            drafts={drafts}
-            activeDraft={activeDraft}
-            draftWarning={draftWarning}
+            clips={clips}
+            clipsLoading={clipsLoading}
+            clipsError={!!clipsError}
+            legacyDrafts={legacyDrafts}
+            activeClip={activeClip}
+            clipWarning={clipWarning}
             currentMarker={currentMarker}
             canEdit={canEdit}
             editReason={editReason}
+            canDownload={canDownload}
+            ffmpeg={ffmpeg}
             onSeekMarker={pickMarker}
             onSelectMarker={selectFromMarker}
-            onLoadDraft={loadDraft}
+            onLoadClip={loadClip}
             compact={compact}
           />
         </aside>

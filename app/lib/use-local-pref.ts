@@ -39,6 +39,15 @@ export function writePref(key: string, value: string) {
   notify()
 }
 
+export function removePref(key: string) {
+  try {
+    window.localStorage.removeItem(key)
+  } catch {
+    /* 同上 */
+  }
+  notify()
+}
+
 /** 原样的字符串值（没有时为 null）；结构化的值由调用方按这个字符串 memo 解析，快照保持稳定。 */
 export function useRawPref(key: string): string | null {
   return useSyncExternalStore(

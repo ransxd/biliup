@@ -195,6 +195,16 @@
   color: var(--semi-color-danger);
 }
 
+.snapToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--semi-color-text-1);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .selActions {
   display: inline-flex;
   flex-wrap: wrap;
@@ -584,6 +594,54 @@
 }
 .renameRow :global(.semi-input-wrapper) {
   flex: 1 1 140px;
+}
+
+/* ===== 切片 ===== */
+.clipStatus {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--semi-color-text-1);
+  word-break: break-word;
+}
+.clipStatus[data-state='exporting'] {
+  color: var(--semi-color-primary);
+}
+.clipStatus[data-state='ready'] {
+  color: var(--semi-color-success);
+}
+.clipStatus[data-state='failed'] {
+  color: var(--semi-color-danger);
+}
+.clipStatus[data-state='draft'] {
+  color: var(--semi-color-text-2);
+}
+.clipProgress {
+  max-width: 220px;
+}
+.clipTools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-top: 4px;
+}
+
+.legacy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--semi-color-text-1);
+  background: var(--semi-color-warning-light-default);
+}
+.legacyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 /* ===== 宽度适配 ===== */

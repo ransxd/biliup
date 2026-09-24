@@ -29,6 +29,9 @@ const STATE_LABEL: Record<SegmentView['state'], string> = {
   pending_delete: '等待清理（仍可回看）',
 }
 
+/** 不吸附时 ← / → 挪多少，也是入点、出点之间的最小距离 */
+const FREE_STEP_MS = 100
+
 function pct(t: number, from: number, to: number): number {
   return ((t - from) / Math.max(1, to - from)) * 100
 }
@@ -244,7 +247,8 @@ export function OverviewBar({
 
 /**
  * 细节条：当前位置前后各 5 分钟。关键帧刻度、入点 / 出点手柄（拖动时吸附到最近的落刀点，
- * 获得焦点后可以用 ← / → 挪到上一个 / 下一个落刀点），点刻度区域跳到那一刻。
+ * 获得焦点后可以用 ← / → 挪到上一个 / 下一个落刀点；关掉吸附时拖到哪里是哪里，← / → 挪 0.1 秒），
+ * 点刻度区域跳到那一刻。
  */
 export function DetailBar({
   from,
@@ -257,6 +261,7 @@ export function DetailBar({
   playhead,
   loading,
   truncated,
+  snap,
   onSeek,
   onBlocked,
   onChange,
@@ -273,6 +278,8 @@ export function DetailBar({
   playhead: number | null
   loading: boolean
   truncated: boolean
+  /** 入点、出点吸附到落刀点 */
+  snap: boolean
   onSeek: (ms: number) => void
   onBlocked: (segment: SegmentView) => void
   onChange: (selection: Selection) => void
@@ -286,17 +293,28 @@ export function DetailBar({
       ? points.filter((p) => selection.out === null || p < selection.out)
       : points.filter((p) => selection.in === null || p > selection.in)
 
+  /** 不吸附时的取值：不越过另一端，不出细节条 */
+  const free = (which: 'in' | 'out', ms: number): number | null => {
+    const lo = which === 'out' && selection.in !== null ? selection.in + FREE_STEP_MS : from
+    const hi = which === 'in' && selection.out !== null ? selection.out - FREE_STEP_MS : to
+    return lo > hi ? null : Math.round(Math.min(Math.max(ms, lo, 0), hi))
+  }
+
   const moveTo = (which: 'in' | 'out', ms: number) => {
-    const snapped = nearestPoint(candidates(which), ms)
-    if (snapped === null || snapped === selection[which]) return
-    onChange({ ...selection, [which]: snapped })
+    const next = snap ? nearestPoint(candidates(which), ms) : free(which, ms)
+    if (next === null || next === selection[which]) return
+    onChange({ ...selection, [which]: next })
   }
 
   const step = (which: 'in' | 'out', dir: -1 | 1) => {
     const current = selection[which]
     if (current === null) return
     const list = candidates(which)
-    const next = dir < 0 ? floorPoint(list, current - 1) : ceilPoint(list, current + 1)
+    const next = !snap
+      ? free(which, current + dir * FREE_STEP_MS)
+      : dir < 0
+        ? floorPoint(list, current - 1)
+        : ceilPoint(list, current + 1)
     if (next !== null) onChange({ ...selection, [which]: next })
   }
 
@@ -312,12 +330,16 @@ export function DetailBar({
         style={{ left: `${pct(value, from, to)}%` }}
         role="slider"
         tabIndex={0}
-        aria-label={`${label}（按关键帧吸附）`}
+        aria-label={snap ? `${label}（按关键帧吸附）` : label}
         aria-valuemin={Math.round(from)}
         aria-valuemax={Math.round(to)}
         aria-valuenow={Math.round(value)}
         aria-valuetext={formatPrecise(value)}
-        title={`${label} ${formatPrecise(value)}：拖动时吸附到最近的关键帧；选中后按 ← / → 挪一格`}
+        title={
+          snap
+            ? `${label} ${formatPrecise(value)}：拖动时吸附到最近的关键帧；选中后按 ← / → 挪一格`
+            : `${label} ${formatPrecise(value)}：拖到哪里是哪里；选中后按 ← / → 挪 0.1 秒`
+        }
         onPointerDown={(e) => {
           e.stopPropagation()
           e.currentTarget.setPointerCapture(e.pointerId)
