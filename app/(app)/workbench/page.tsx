@@ -348,16 +348,19 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
 
   // 连不上、连接中途断掉或服务端 5xx 时从停下的地方自动重开几次；服务端明确拒绝（404、415 等）不重试
   const retryable = errorStatus !== null && (errorStatus === 0 || errorStatus >= 500)
-  const retryFrom =
-    mode?.kind === 'dvr' && phase === 'error' && retryable && retries < NETWORK_RETRIES ? (pos ?? mode.from) : null
+  // 断开后缓冲里剩下的画面还会接着放，重开的位置在计时结束时再取
+  const retryOf = mode?.kind === 'dvr' && phase === 'error' && retryable && retries < NETWORK_RETRIES ? mode.nonce : null
   useEffect(() => {
-    if (retryFrom === null) return
+    if (retryOf === null) return
     const timer = setTimeout(() => {
+      const at = dvrRef.current?.position()
       setRetries((n) => n + 1)
-      setMode((m) => (m?.kind === 'dvr' ? { kind: 'dvr', from: Math.round(retryFrom), nonce: m.nonce + 1 } : m))
+      setMode((m) =>
+        m?.kind === 'dvr' && m.nonce === retryOf ? { kind: 'dvr', from: Math.round(at ?? m.from), nonce: m.nonce + 1 } : m
+      )
     }, NETWORK_RETRY_MS)
     return () => clearTimeout(timer)
-  }, [retryFrom])
+  }, [retryOf])
 
   const playing = mode?.kind === 'live' || (mode?.kind === 'dvr' && (phase === 'playing' || phase === 'waiting'))
   const togglePlay = () => {
@@ -667,7 +670,7 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
     )
   } else {
     const overlay =
-      retryFrom !== null
+      retryOf !== null
         ? `${message ?? '回看连接断开'}（${NETWORK_RETRY_MS / 1000} 秒后自动重试，第 ${retries + 1}/${NETWORK_RETRIES} 次）`
         : phase === 'error'
         ? message
