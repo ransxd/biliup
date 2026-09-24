@@ -408,4 +408,11 @@ fn rate_limits_and_bilibili_rejections_are_told_apart() {
         message,
         "提交视频失败：B 站拒绝了投稿：您投稿的频率过快（code 21070）"
     );
+    assert_eq!(
+        bilibili_message(
+            r#"ResponseData { code: 21566, data: None, message: "封面格式不对", ttl: Some(1) }"#,
+            "封面"
+        ),
+        "B 站拒绝了封面：封面格式不对（code 21566）"
+    );
 }

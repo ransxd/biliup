@@ -88,7 +88,7 @@ fn describe(report: &Report<AppError>) -> Failure {
             if let Kind::RateLimit { message, .. } = kind {
                 return Failure::RateLimited(format!("{RATE_LIMITED}（{message}）"));
             }
-            parts.push(bilibili_message(&kind.to_string()));
+            parts.push(bilibili_message(&kind.to_string(), "投稿"));
         } else if let Some(AppError::Custom(message)) = frame.downcast_ref::<AppError>() {
             parts.push(message.clone());
         }
@@ -100,8 +100,9 @@ fn describe(report: &Report<AppError>) -> Failure {
     Failure::Other(parts.join("："))
 }
 
-/// 投稿接口出错时库里只给 `ResponseData { code: .., message: ".." .. }` 的 Debug 串，挑出 code 和 message。
-fn bilibili_message(text: &str) -> String {
+/// 投稿 / 封面接口出错时库里只给 `ResponseData { code: .., message: ".." .. }` 的 Debug 串，
+/// 挑出 code 和 message；`what` 是被拒的东西（投稿、封面）。
+fn bilibili_message(text: &str, what: &str) -> String {
     let code = text
         .split("code: ")
         .nth(1)
@@ -113,7 +114,7 @@ fn bilibili_message(text: &str) -> String {
         .and_then(|rest| rest.split('"').next());
     match (code, message) {
         (Some(code), Some(message)) if text.starts_with("ResponseData") => {
-            format!("B 站拒绝了投稿：{message}（code {code}）")
+            format!("B 站拒绝了{what}：{message}（code {code}）")
         }
         _ => text.to_string(),
     }
@@ -186,7 +187,7 @@ impl Connection for BiliConnection {
             .bilibili
             .cover_up(&bytes)
             .await
-            .map_err(|e| Failure::Other(bilibili_message(&e.to_string())))
+            .map_err(|e| Failure::Other(bilibili_message(&e.to_string(), "封面")))
     }
 
     async fn submit(&self, studio: &Studio) -> Result<Submitted, Failure> {
