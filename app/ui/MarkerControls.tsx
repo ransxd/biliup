@@ -1,9 +1,11 @@
 'use client'
 import React, { useCallback, useEffect, useState } from 'react'
 import { Button, Input, Toast, Tooltip, Typography } from '@douyinfe/semi-ui'
-import { IconFlag } from '@douyinfe/semi-icons'
+import { IconDownload, IconFlag, IconScissors } from '@douyinfe/semi-icons'
 import type { LiveStreamerEntity } from '@/app/lib/api-streamer'
 import { useMe } from '@/app/lib/use-me'
+import { formatSize } from '@/app/lib/use-dashboard'
+import { type Clip, createLiveClip, downloadClip, exportClip, LAST_CLIP_OPTIONS, useClip } from '@/app/lib/clips'
 import {
   createLiveMarker,
   deleteMarker,
@@ -58,8 +60,8 @@ function markDisabledReason(
   meLoading: boolean
 ): string | null {
   if (meLoading) return '正在读取权限…'
-  if (!canEdit) return '只读观察者不能打标记：需要 clip.edit 权限，请让管理员把你的角色改成操作员'
-  if (streamer.session_id == null) return '这一场还没有写出第一个分段，画面开始写盘后才能标记'
+  if (!canEdit) return '只读观察者不能打标记和剪切片：需要 clip.edit 权限，请让管理员把你的角色改成操作员'
+  if (streamer.session_id == null) return '这一场还没有写出第一个分段，画面开始写盘后才能标记和剪'
   return null
 }
 
@@ -198,6 +200,161 @@ export function showMarkerToast(marker: Marker) {
   Toast.success({ id, duration: 0, content: <MarkerToast marker={marker} onClose={close} /> })
 }
 
+/** 「剪下刚才 N 秒」之后的 Toast：跟着导出进度走，剪好了给下载和去剪辑台的入口，失败了给原因和重试 */
+function ClipToast({ initial, span, onClose }: { initial: Clip; span: string; onClose: () => void }) {
+  const { data } = useClip(initial.id)
+  const clip = data ?? initial
+  const [hover, setHover] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+
+  const ready = clip.state === 'ready'
+  useEffect(() => {
+    if (!ready || hover) return
+    const t = setTimeout(onClose, TOAST_MS * 2)
+    return () => clearTimeout(t)
+  }, [ready, hover, onClose])
+
+  const act = (run: () => Promise<unknown>, failure: string) => {
+    setBusy(true)
+    setNote(null)
+    run().then(
+      () => setBusy(false),
+      (e: unknown) => {
+        setBusy(false)
+        if (!(e instanceof ReportedError)) setNote(`${failure}：${errorText(e)}`)
+      }
+    )
+  }
+  const ratio = clip.progress?.ratio ?? null
+  return (
+    <div className={styles.toast} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <div className={styles.toastRow}>
+        <span className={styles.toastText}>
+          {clip.state === 'exporting' ? (
+            <>
+              正在剪刚才 <b>{span}</b> · {clip.progress?.phase ?? '准备中'}
+              {ratio !== null ? ` ${Math.round(ratio * 100)}%` : ''}
+            </>
+          ) : ready ? (
+            <>
+              已剪好刚才 <b>{span}</b>
+              {clip.output_bytes !== null ? `（${formatSize(clip.output_bytes)}）` : ''}
+            </>
+          ) : clip.state === 'failed' ? (
+            <>没剪成：{clip.error || '原因未知'}</>
+          ) : (
+            <>切片已存下，还没导出</>
+          )}
+        </span>
+        <span className={styles.toastActions}>
+          {ready ? (
+            <Button
+              size="small"
+              theme="borderless"
+              icon={<IconDownload />}
+              loading={busy}
+              onClick={() => act(() => downloadClip(clip, 'source'), '下载失败')}
+            >
+              下载
+            </Button>
+          ) : null}
+          {clip.state === 'failed' || clip.state === 'draft' ? (
+            <Button
+              size="small"
+              theme="borderless"
+              loading={busy}
+              onClick={() => act(() => exportClip(clip, 'quick'), '没能重试')}
+            >
+              {clip.state === 'failed' ? '重试' : '快速剪'}
+            </Button>
+          ) : null}
+          <Button
+            size="small"
+            theme="borderless"
+            icon={<IconScissors />}
+            onClick={() => window.open(`/workbench?session=${clip.session_id}&t=${clip.in_ms}`, '_blank', 'noopener')}
+          >
+            剪辑台
+          </Button>
+        </span>
+      </div>
+      {note ? <div className={styles.toastNote}>{note}</div> : null}
+    </div>
+  )
+}
+
+export function showClipToast(clip: Clip, span: string) {
+  const id = `clip-${clip.id}`
+  const close = () => Toast.close(id)
+  Toast.info({ id, duration: 0, icon: <IconScissors />, content: <ClipToast initial={clip} span={span} onClose={close} /> })
+}
+
+/** 预览弹层里「剪下刚才 N 秒」的一组按钮：按屏幕上正在放的这一帧往前剪，建好立即快速剪 */
+function LastClipButtons({
+  sessionId,
+  reason,
+  playerRoot,
+}: {
+  sessionId: number | null
+  reason: string | null
+  playerRoot: React.RefObject<HTMLDivElement | null>
+}) {
+  const [pending, setPending] = useState<number | null>(null)
+  const cut = useCallback(
+    (lastMs: number, span: string) => {
+      if (reason !== null || sessionId === null) {
+        Toast.warning({ id: 'clip-disabled', content: reason ?? '现在不能剪', duration: 3 })
+        return
+      }
+      const pressedAt = Date.now()
+      const latencyMs = playerLatencyMs(playerRoot.current)
+      setPending(lastMs)
+      createLiveClip(sessionId, { lastMs, pressedAt, latencyMs }).then(
+        (clip) => {
+          setPending(null)
+          showClipToast(clip, span)
+        },
+        (e: unknown) => {
+          setPending(null)
+          if (!(e instanceof ReportedError)) Toast.error({ content: `没剪成：${errorText(e)}`, duration: 5 })
+        }
+      )
+    },
+    [reason, sessionId, playerRoot]
+  )
+  return (
+    <span className={styles.clipGroup} role="group" aria-label="剪下刚才">
+      <span className={styles.clipLabel}>
+        <IconScissors size="small" aria-hidden="true" />
+        剪下刚才
+      </span>
+      {LAST_CLIP_OPTIONS.map((o) => {
+        const button = (
+          <Button
+            className={styles.clipBtn}
+            theme="light"
+            disabled={reason !== null}
+            loading={pending === o.ms}
+            onClick={() => cut(o.ms, o.label)}
+            aria-label={`剪下刚才 ${o.label}`}
+          >
+            {o.label}
+          </Button>
+        )
+        return (
+          <Tooltip
+            key={o.ms}
+            content={reason ?? `把正在放的画面之前 ${o.label} 快速剪成一个文件（按关键帧切，不转码，保持录像原格式）`}
+          >
+            {reason !== null ? <span className={styles.disabledWrap}>{button}</span> : button}
+          </Tooltip>
+        )
+      })}
+    </span>
+  )
+}
+
 /**
  * 预览弹层里的「标记」：按钮 + 快捷键 M（弹层打开期间）。
  * 标记的是屏幕上正在放的这一帧：按下时刻减去播放器延迟，由服务端换算成场次时间。
@@ -270,8 +427,9 @@ export function LiveMarkBar({
       ) : (
         button
       )}
+      <LastClipButtons sessionId={sessionId} reason={reason} playerRoot={playerRoot} />
       <Text type="tertiary" size="small" className={styles.hint}>
-        {reason ?? '标记正在放的画面（默认带上之前 60 秒），之后在剪辑台里从这里剪'}
+        {reason ?? '标记正在放的画面，之后在剪辑台里从这里剪；或者直接剪下刚才的一段'}
       </Text>
       {count > 0 ? (
         <span className={styles.barCount} aria-label={`本场 ${count} 个标记`}>
