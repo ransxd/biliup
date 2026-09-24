@@ -295,18 +295,35 @@ function Workbench({ sessionId, initialT }: { sessionId: number; initialT: numbe
     openAt(ms)
   }
 
-  const onPosition = useCallback(
-    (ms: number) => {
-      setPos(ms)
-      setFocus((f) => {
-        const c = f ?? ms
-        const from = Math.max(0, c - DETAIL_HALF_MS)
-        const to = from + 2 * DETAIL_HALF_MS
-        return ms < from + DETAIL_EDGE_MS || ms > to - DETAIL_EDGE_MS ? ms : f
-      })
-    },
-    []
-  )
+  const onPosition = (ms: number) => {
+    // 服务端在同一条响应里跳过已清理 / 丢失的分段（时间戳照场次时间往后跳），mpegts.js 会把这种跳变抹平接着放，
+    // 这时按起播点推算的位置会落进不可读的分段里、比真实画面慢一截：从下一个可读分段重开，把位置对回来
+    // 只认严格落在不可读分段内部、且离起播点有一段距离的位置：分段首尾相接，边界上的位置也属于下一个可读分段
+    const seg = segments.find((s) => ms > s.start_ms && ms < segmentEnd(s))
+    const inCleaned =
+      mode?.kind === 'dvr' &&
+      ms > mode.from + 500 &&
+      !!seg &&
+      !isReadable(seg) &&
+      !segments.some((s) => isReadable(s) && ms >= s.start_ms && ms <= segmentEnd(s))
+    if (inCleaned) {
+      const end = segmentEnd(seg)
+      const next = segments.find((s) => isReadable(s) && s.start_ms >= end)
+      if (next) {
+        Toast.info({ id: 'deleted-skip', content: `跳过已清理的录像，从 ${formatSessionTime(next.start_ms)} 继续`, duration: 2 })
+        setPos(next.start_ms)
+        openAt(next.start_ms)
+        return
+      }
+    }
+    setPos(ms)
+    setFocus((f) => {
+      const c = f ?? ms
+      const from = Math.max(0, c - DETAIL_HALF_MS)
+      const to = from + 2 * DETAIL_HALF_MS
+      return ms < from + DETAIL_EDGE_MS || ms > to - DETAIL_EDGE_MS ? ms : f
+    })
+  }
   const onPhase = useCallback((p: DvrPhase, text?: string, status?: number) => {
     setPhase(p)
     setMessage(p === 'error' ? (text ?? '回看出错') : null)
