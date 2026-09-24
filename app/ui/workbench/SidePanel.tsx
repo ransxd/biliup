@@ -529,11 +529,24 @@ function PublishStatus({ job, canSubmit }: { job: PublishJob; canSubmit: boolean
 function Published({ clip }: { clip: Clip }) {
   if (!clip.archive_bvid) return null
   return (
-    <a className={styles.bvLink} href={archiveUrl(clip.archive_bvid)} target="_blank" rel="noopener noreferrer">
-      <IconExternalOpen size="small" aria-hidden="true" />
-      {clip.archive_bvid}
-      {clip.published_at ? <span className={styles.rowMeta}> · {new Date(clip.published_at).toLocaleString('zh-CN', { hour12: false })}</span> : null}
-    </a>
+    <span className={styles.published}>
+      <a className={styles.bvLink} href={archiveUrl(clip.archive_bvid)} target="_blank" rel="noopener noreferrer">
+        <IconExternalOpen size="small" aria-hidden="true" />
+        {clip.archive_bvid}
+      </a>
+      {clip.published_at ? (
+        <span className={styles.rowMeta}>
+          {new Date(clip.published_at).toLocaleString('zh-CN', {
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          })}{' '}
+          投稿
+        </span>
+      ) : null}
+    </span>
   )
 }
 

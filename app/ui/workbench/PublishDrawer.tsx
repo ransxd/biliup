@@ -230,7 +230,7 @@ function DrawerBody({
   const patch = (p: Partial<Form>) => setForm((f) => ({ ...f, ...p }))
 
   const { data: templates } = useSWR<StudioEntity[]>('/v1/upload/streamers', fetcher)
-  const { typeTree } = useTypeTree()
+  const { typeTree, isError: typeTreeError } = useTypeTree()
 
   const tooMany = target.clips.length > (combine ? MAX_PARTS : MAX_BATCH)
   const problem = dtimeProblem(form)
@@ -413,7 +413,10 @@ function DrawerBody({
               label="稿件标题"
               hint={
                 <>
-                  留空用默认：{firstRendered ? `「${firstRendered.title}」` : '切片标题'}。可用变量 {'{clip_title}'} 切片标题、
+                  {form.title.trim()
+                    ? '留空用模板的标题（没有切片变量时用切片标题）'
+                    : `留空用默认：${firstRendered ? `「${firstRendered.title}」` : '切片标题'}`}
+                  。可用变量 {'{clip_title}'} 切片标题、
                   {'{clip_time}'} 切片开始的时间、{'{streamer}'} 主播、{'{title}'} 直播标题
                 </>
               }
@@ -450,11 +453,14 @@ function DrawerBody({
                 aria-label="标签"
               />
             </Field>
-            <Field label="分区" hint="留空用模板的分区">
+            <Field
+              label="分区"
+              hint={typeTree || !typeTreeError ? '留空用模板的分区' : '读不到 B 站的分区列表（检查投稿账号登录状态），先沿用模板的分区'}
+            >
               <Cascader
                 value={tidPath(tree, form.tid)}
                 treeData={tree}
-                placeholder={typeTree ? '沿用模板' : '正在读取 B 站分区…'}
+                placeholder={typeTree ? '沿用模板' : typeTreeError ? '沿用模板' : '正在读取 B 站分区…'}
                 disabled={!typeTree}
                 showClear
                 onChange={(v) => {
