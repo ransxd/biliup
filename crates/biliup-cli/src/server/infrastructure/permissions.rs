@@ -149,6 +149,13 @@ pub fn required_permission(method: &Method, route: &str, raw_path: &str) -> Opti
         "/v1/ws/live-rates" | "/v1/live-rates" if get => StreamerView,
         "/v1/sessions" | "/v1/sessions/{id}" | "/v1/sessions/{id}/keyframes" if get => FileView,
         "/v1/sessions/{id}/media" if get => PreviewView,
+        "/v1/sessions/{id}/markers" if get => FileView,
+        "/v1/sessions/{id}/markers" if method == Method::POST => ClipEdit,
+        "/v1/sessions/{id}/markers/{mid}"
+            if method == Method::PATCH || method == Method::DELETE =>
+        {
+            ClipEdit
+        }
         "/v1/configuration" if get => ConfigView,
         "/v1/configuration" if method == Method::PUT => ConfigEdit,
         "/v1/streamer-info" | "/v1/streamer-info/files/{id}" if get => StreamerView,
@@ -226,7 +233,13 @@ mod tests {
             "/v1/me",
             "/v1/me/password",
         ];
-        let methods = [Method::GET, Method::POST, Method::PUT, Method::DELETE];
+        let methods = [
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+        ];
         let mut seen = 0;
         for source in sources {
             for route in registered_routes(non_test_source(source)) {
