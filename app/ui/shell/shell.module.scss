@@ -1,0 +1,153 @@
+/* 三种容器共用的底栏：右对齐「取消」+ 主按钮，左侧可放次要操作或提示 */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+
+.footer :global(.semi-button) {
+  margin-left: 0 !important;
+}
+
+.footerExtra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-right: auto;
+  color: var(--semi-color-text-2);
+  font-size: 12px;
+}
+
+/* ===== 弹窗 ===== */
+/* 内容比矮屏高时只滚正文，标题与底栏始终露在外面 */
+.dialog :global(.semi-modal-body) {
+  max-height: calc(100dvh - 200px);
+  overflow-y: auto;
+}
+
+.dialogFull :global(.semi-modal-body) {
+  max-height: none;
+}
+
+.dialog :global(.semi-modal-footer) {
+  margin-top: 16px;
+}
+
+/* ===== 抽屉 ===== */
+.sheet :global(.semi-sidesheet-header) {
+  padding: 14px 16px 14px 24px;
+  border-bottom: 1px solid var(--semi-color-border);
+}
+
+.sheet :global(.semi-sidesheet-body) {
+  padding: 16px 24px 24px;
+}
+
+.sheet :global(.semi-sidesheet-footer) {
+  padding: 12px 24px;
+  border-top: 1px solid var(--semi-color-border);
+}
+
+.sheetTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 32px;
+  color: var(--semi-color-text-0);
+}
+
+.sheetTitleText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheetBack {
+  margin-left: -8px;
+  flex-shrink: 0;
+}
+
+.sheetExtra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+/* ===== 表单页 ===== */
+.pageBack {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  border-radius: inherit;
+}
+
+.pageBack:hover {
+  background: var(--semi-color-primary-light-hover);
+}
+
+.pageBack:focus-visible {
+  outline: 2px solid var(--semi-color-primary);
+  outline-offset: 2px;
+}
+
+.pageBody {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px 28px 32px;
+  box-sizing: border-box;
+}
+
+.pageCard {
+  background: var(--semi-color-bg-1);
+  border: 1px solid var(--semi-color-fill-2);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(var(--semi-grey-9), 0.04), 0 2px 6px rgba(var(--semi-grey-9), 0.03);
+  padding: 28px 32px;
+  min-width: 0;
+}
+
+/* 吸在主内容区（唯一的滚动容器）底部：长表单滚到哪里主按钮都在右下角 */
+.pageFoot {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  margin-top: auto;
+  background: var(--semi-color-bg-1);
+  border-top: 1px solid var(--semi-color-border);
+}
+
+.pageFootInner {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 12px 28px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 880px) {
+  .pageBody {
+    padding: 16px 12px 24px;
+  }
+
+  .pageCard {
+    padding: 20px 16px;
+  }
+
+  .pageFootInner {
+    padding: 10px 16px;
+  }
+}
