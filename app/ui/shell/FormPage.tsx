@@ -1,23 +1,39 @@
 'use client'
+import { Button } from '@douyinfe/semi-ui'
 import { IconArrowLeft } from '@douyinfe/semi-icons'
 import Link from 'next/link'
-import { useSyncExternalStore, type ReactNode } from 'react'
+import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import PageHeader from '@/app/(app)/components/PageHeader'
-import ShellFooter, { type ShellActions } from './ShellFooter'
 import styles from './shell.module.scss'
 
-export type FormPageProps = ShellActions & {
+export type FormPageProps = {
   title: ReactNode
   description?: ReactNode
-  /** 返回哪一页：页头左侧的返回按钮与「取消」都回到这里 */
+  /** 返回哪一页：页头左侧的返回箭头回到这里。页面没有「取消」 */
   back: { href: string; label: string }
-  /** 页头右侧的次要操作；主操作固定在底栏右侧 */
-  headerExtra?: ReactNode
+  /** 页头右上角的主按钮，写动作本身（创建模板 / 保存模板）；不传则页头不放按钮 */
+  okText?: ReactNode
+  okIcon?: ReactNode
+  /** 返回 Promise 时按钮自动转圈；reject 时停在页面上（调用方负责提示），不丢已填内容 */
+  onOk?: () => unknown
+  okDisabled?: boolean
   children?: ReactNode
 }
 
-/** 表单页：页头（返回 + 标题）、居中的内容列、吸底的操作栏 */
-export default function FormPage({ title, description, back, headerExtra, children, ...actions }: FormPageProps) {
+/** 表单页：页头（返回箭头 + 标题 + 右上角主按钮）+ 内容列。不套卡片，分区靠表单自己的分节标题 */
+export default function FormPage({ title, description, back, okText, okIcon, onOk, okDisabled, children }: FormPageProps) {
+  const [busy, setBusy] = useState(false)
+  const run = async () => {
+    if (!onOk || busy) return
+    setBusy(true)
+    try {
+      await onOk()
+    } catch {
+      // 校验失败或接口报错：表单已标红 / 调用方已弹提示
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <>
       <PageHeader
@@ -34,16 +50,15 @@ export default function FormPage({ title, description, back, headerExtra, childr
         }
         title={title}
         description={description}
-        actions={headerExtra}
+        actions={
+          okText ? (
+            <Button theme="solid" icon={okIcon} onClick={run} loading={busy} disabled={okDisabled || !onOk}>
+              {okText}
+            </Button>
+          ) : undefined
+        }
       />
-      <div className={styles.pageBody}>
-        <div className={styles.pageCard}>{children}</div>
-      </div>
-      <div className={styles.pageFoot}>
-        <div className={styles.pageFootInner}>
-          <ShellFooter {...actions} />
-        </div>
-      </div>
+      <div className={styles.pageBody}>{children}</div>
     </>
   )
 }

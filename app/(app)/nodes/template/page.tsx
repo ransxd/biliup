@@ -31,7 +31,7 @@ function FleetTemplatePage() {
   const loadError = error ?? nodesError
   if (loadError) {
     return (
-      <FormPage title={title} back={FLEET_TEMPLATES_BACK} onCancel={back} cancelText="返回">
+      <FormPage title={title} back={FLEET_TEMPLATES_BACK}>
         <Empty title="加载失败" description={errorMessage(loadError)} style={{ padding: '48px 0' }}>
           <Button onClick={() => mutate()}>重试</Button>
         </Empty>
@@ -40,7 +40,7 @@ function FleetTemplatePage() {
   }
   if (!nodes || !templates) {
     return (
-      <FormPage title={title} back={FLEET_TEMPLATES_BACK} onCancel={back}>
+      <FormPage title={title} back={FLEET_TEMPLATES_BACK}>
         <div style={{ padding: '64px 0', textAlign: 'center' }}>
           <Spin size="large" />
         </div>
@@ -50,7 +50,7 @@ function FleetTemplatePage() {
   const template = editing ? templates.find((t) => t.id === id) : null
   if (template === undefined) {
     return (
-      <FormPage title={title} back={FLEET_TEMPLATES_BACK} onCancel={back} cancelText="返回">
+      <FormPage title={title} back={FLEET_TEMPLATES_BACK}>
         <Empty title="没有这个模板" description={`投稿模板 #${id} 不存在或已被删除`} style={{ padding: '48px 0' }} />
       </FormPage>
     )
@@ -60,7 +60,6 @@ function FleetTemplatePage() {
       key={template?.id ?? 'new'}
       template={template}
       nodes={nodes.nodes}
-      onClose={back}
       onSaved={() => {
         mutate().catch(() => undefined)
         back()

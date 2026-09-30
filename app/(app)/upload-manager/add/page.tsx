@@ -2,6 +2,7 @@
 import React, { useRef } from 'react'
 import { Form, Toast, Notification, Typography } from '@douyinfe/semi-ui'
 import { FormApi } from '@douyinfe/semi-ui/lib/es/form'
+import { IconPlusCircle } from '@douyinfe/semi-icons'
 import { sendRequest, StudioEntity } from '../../../lib/api-streamer'
 import useSWRMutation from 'swr/mutation'
 import { useRouter } from 'next/navigation'
@@ -64,9 +65,9 @@ export default function Add() {
       title="新建投稿模板"
       description="配置投稿模板,保存后可用于上传录制文件"
       back={{ href: '/upload-manager', label: '投稿管理' }}
-      okText="创建"
+      okText="创建模板"
+      okIcon={<IconPlusCircle />}
       onOk={handleCreate}
-      onCancel={() => router.push('/upload-manager')}
     >
       <Form
         autoScrollToError

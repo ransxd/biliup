@@ -5,6 +5,7 @@ import type { FormApi, FormFCChild } from '@douyinfe/semi-ui/lib/es/form'
 import TemplateFields from '@/app/ui/TemplateFields'
 import type { BiliType } from '@/app/lib/api-streamer'
 import { useTypeTree } from '@/app/lib/use-streamers'
+import { IconPlusCircle } from '@douyinfe/semi-icons'
 import { FormPage, usePageLabelPosition } from '@/app/ui/shell'
 import {
   createTemplate,
@@ -76,13 +77,11 @@ export const FLEET_TEMPLATES_BACK = { href: '/nodes?tab=templates', label: '投�
 export default function FleetTemplateEditor({
   template,
   nodes,
-  onClose,
   onSaved,
 }: {
   /** null 为新建 */
   template: FleetTemplate | null
   nodes: FleetNode[]
-  onClose: () => void
   onSaved: () => void
 }) {
   const labelPosition = usePageLabelPosition()
@@ -164,9 +163,9 @@ export default function FleetTemplateEditor({
       title={template ? `编辑投稿模板「${template.template_name}」` : '新建投稿模板'}
       description="Fleet 投稿模板：保存后下发到用它的节点"
       back={FLEET_TEMPLATES_BACK}
-      okText={template ? '保存' : '创建'}
+      okText={template ? '保存模板' : '创建模板'}
+      okIcon={template ? undefined : <IconPlusCircle />}
       onOk={isLoading ? undefined : save}
-      onCancel={onClose}
     >
       {isLoading ? (
         <div className={styles.dialogCenter}>

@@ -69,21 +69,6 @@
   white-space: nowrap;
 }
 
-.sheetBack {
-  margin-left: -8px;
-  flex-shrink: 0;
-}
-
-.sheetExtra {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  font-size: 14px;
-  font-weight: 400;
-  flex-shrink: 0;
-}
-
 /* ===== 表单页 ===== */
 .pageBack {
   display: flex;
@@ -106,48 +91,15 @@
 
 .pageBody {
   width: 100%;
-  max-width: 1040px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 24px 28px 32px;
+  padding: 8px 28px 48px;
   box-sizing: border-box;
-}
-
-.pageCard {
-  background: var(--semi-color-bg-1);
-  border: 1px solid var(--semi-color-fill-2);
-  border-radius: 12px;
-  box-shadow: 0 1px 2px rgba(var(--semi-grey-9), 0.04), 0 2px 6px rgba(var(--semi-grey-9), 0.03);
-  padding: 28px 32px;
   min-width: 0;
-}
-
-/* 吸在主内容区（唯一的滚动容器）底部：长表单滚到哪里主按钮都在右下角 */
-.pageFoot {
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
-  margin-top: auto;
-  background: var(--semi-color-bg-1);
-  border-top: 1px solid var(--semi-color-border);
-}
-
-.pageFootInner {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 12px 28px;
-  box-sizing: border-box;
 }
 
 @media (max-width: 880px) {
   .pageBody {
-    padding: 16px 12px 24px;
-  }
-
-  .pageCard {
-    padding: 20px 16px;
-  }
-
-  .pageFootInner {
-    padding: 10px 16px;
+    padding: 4px 16px 36px;
   }
 }

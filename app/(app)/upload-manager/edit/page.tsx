@@ -51,14 +51,14 @@ const Edit = () => {
       : undefined
   if (loadError) {
     return (
-      <FormPage title="编辑投稿模板" back={BACK} onCancel={() => router.push(BACK.href)} cancelText="返回">
+      <FormPage title="编辑投稿模板" back={BACK}>
         <Typography.Text type="danger">{loadError}</Typography.Text>
       </FormPage>
     )
   }
   if (isLoading || !data || !typeTree) {
     return (
-      <FormPage title="编辑投稿模板" back={BACK} onCancel={() => router.push(BACK.href)}>
+      <FormPage title="编辑投稿模板" back={BACK}>
         <div style={{ padding: '64px 0', textAlign: 'center' }}>
           <Spin size="large" />
         </div>
@@ -133,9 +133,8 @@ const Edit = () => {
       title={`编辑投稿模板「${data.template_name}」`}
       description="修改模板信息并保存"
       back={BACK}
-      okText="保存"
+      okText="保存模板"
       onOk={handleSave}
-      onCancel={() => router.push(BACK.href)}
     >
       <Form
         initValues={uploadStreamers}
