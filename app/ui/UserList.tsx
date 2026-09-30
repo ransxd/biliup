@@ -8,14 +8,14 @@ import useSWRMutation from 'swr/mutation'
 import { useBiliUsers } from '../lib/use-streamers'
 import QRcode from '@/app/ui/QRcode'
 import PairAccountsHint from './PairAccountsHint'
-import { FormSheet, ShellFooter } from './shell'
+import { FormDialog, FormSheet } from './shell'
 
 type UserListProps = {
   onCancel?: () => void
   visible?: boolean
 }
 
-type Method = 'qrcode' | 'cookie'
+type Method = 'cookie' | 'qrcode'
 
 function errorText(e: any): string {
   const raw = e?.message ?? String(e)
@@ -26,14 +26,54 @@ function errorText(e: any): string {
   }
 }
 
-/** 投稿管理页的「B 站账号」：列表型抽屉，添加账号是同一抽屉里的第二层，不再叠弹窗 */
+/**
+ * 添加 B 站账号：内容少，用居中小弹窗（从账号抽屉里打开，最多叠这一层）。
+ * 默认「Cookie 文件」：改造前的第一项、内容最少（一个输入框），打开时也不会先去 B 站拉二维码
+ */
+function AddAccountDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (value: string) => Promise<boolean> }) {
+  const [method, setMethod] = useState<Method>('cookie')
+  const api = useRef<FormApi>(undefined)
+  const submitCookie = async () => {
+    const values = await api.current?.validate()
+    if (!(await onAdd(values?.value?.trim()))) throw new Error('add failed')
+  }
+  return (
+    <FormDialog
+      title="添加 B 站账号"
+      size="sm"
+      onCancel={onClose}
+      okText={method === 'cookie' ? '添加' : undefined}
+      onOk={submitCookie}
+      footerExtra={method === 'qrcode' ? '在 B 站 App 里扫码确认后自动添加' : undefined}
+    >
+      <RadioGroup type="button" value={method} onChange={(e) => setMethod(e.target.value as Method)} aria-label="添加方式">
+        <Radio value="cookie">Cookie 文件</Radio>
+        <Radio value="qrcode">扫码登录</Radio>
+      </RadioGroup>
+      {method === 'cookie' ? (
+        <Form getFormApi={(formApi) => (api.current = formApi)} onSubmit={submitCookie} style={{ marginTop: 12 }}>
+          <Form.Input
+            field="value"
+            label="Cookie 文件路径"
+            placeholder="cookies.json"
+            trigger="blur"
+            rules={[{ required: true, message: '填写 biliup 所在机器上的凭据文件路径' }]}
+            extraText="biliup login 生成的凭据文件；相对路径从 biliup 的工作目录算起"
+          />
+        </Form>
+      ) : (
+        <QRcode onSuccess={onAdd} />
+      )}
+    </FormDialog>
+  )
+}
+
+/** 投稿管理页的「B 站账号」：可增删的账号列表用抽屉（背后留着投稿模板），「添加账号」在底栏 */
 const UserList: React.FC<UserListProps> = ({ onCancel, visible }) => {
   const { trigger } = useSWRMutation('/v1/users', sendRequest)
   const { trigger: deleteUser } = useSWRMutation('/v1/users', requestDelete)
   const { biliUsers: list, isLoading } = useBiliUsers()
   const [adding, setAdding] = useState(false)
-  const [method, setMethod] = useState<Method>('qrcode')
-  const api = useRef<FormApi>(undefined)
 
   /** 成功返回 true；失败已弹出原因 */
   const addUser = useCallback(
@@ -55,11 +95,6 @@ const UserList: React.FC<UserListProps> = ({ onCancel, visible }) => {
     [trigger],
   )
 
-  const submitCookie = async () => {
-    const values = await api.current?.validate()
-    if (!(await addUser(values?.value?.trim()))) throw new Error('add failed')
-  }
-
   const remove = async (id: number) => {
     try {
       await deleteUser(id)
@@ -78,103 +113,47 @@ const UserList: React.FC<UserListProps> = ({ onCancel, visible }) => {
     onCancel?.()
   }
 
-  const startAdding = () => {
-    setMethod('qrcode')
-    setAdding(true)
-  }
-
-  if (adding) {
-    return (
+  return (
+    <>
       <FormSheet
         size="sm"
         visible={visible}
-        title="添加 B 站账号"
-        onBack={() => setAdding(false)}
+        title="B 站账号"
         onCancel={close}
-        footer={
-          <ShellFooter
-            onCancel={() => setAdding(false)}
-            cancelText="返回列表"
-            okText={method === 'cookie' ? '添加' : undefined}
-            onOk={submitCookie}
-            footerExtra={method === 'qrcode' ? '在 B 站 App 里扫码确认后自动添加' : undefined}
-          />
-        }
+        cancelText={null}
+        okText={list.length > 0 ? '添加账号' : undefined}
+        onOk={() => setAdding(true)}
       >
-        <RadioGroup
-          type="button"
-          value={method}
-          onChange={(e) => setMethod(e.target.value as Method)}
-          aria-label="添加方式"
-        >
-          <Radio value="qrcode">扫码登录</Radio>
-          <Radio value="cookie">Cookie 文件</Radio>
-        </RadioGroup>
-        {method === 'qrcode' ? (
-          <QRcode onSuccess={addUser} />
+        <PairAccountsHint visible={visible} />
+        {isLoading ? (
+          <div style={{ padding: '48px 0', textAlign: 'center' }}>
+            <Spin />
+          </div>
+        ) : list.length === 0 ? (
+          <Empty title="还没有 B 站账号" description="投稿模板要选一个账号才能投稿" style={{ padding: '48px 0' }}>
+            <Button icon={<IconPlusCircle />} theme="solid" onClick={() => setAdding(true)}>
+              添加账号
+            </Button>
+          </Empty>
         ) : (
-          <Form getFormApi={(formApi) => (api.current = formApi)} onSubmit={submitCookie} style={{ marginTop: 12 }}>
-            <Form.Input
-              field="value"
-              label="Cookie 文件路径"
-              placeholder="cookies.json"
-              trigger="blur"
-              rules={[{ required: true, message: '填写 biliup 所在机器上的凭据文件路径' }]}
-              extraText="biliup login 生成的凭据文件；相对路径从 biliup 的工作目录算起"
-            />
-          </Form>
+          <List
+            dataSource={list}
+            split={false}
+            size="small"
+            renderItem={(item) => (
+              <AvatarCard
+                url={item.face}
+                abbr={item.name}
+                label={item.name}
+                value={item.value}
+                onRemove={async () => await remove(item.id)}
+              />
+            )}
+          />
         )}
       </FormSheet>
-    )
-  }
-
-  return (
-    <FormSheet
-      size="sm"
-      visible={visible}
-      title="B 站账号"
-      onCancel={close}
-      headerExtra={
-        list.length > 0 ? (
-          <Button icon={<IconPlusCircle />} theme="light" type="primary" onClick={startAdding}>
-            添加账号
-          </Button>
-        ) : null
-      }
-      footer={null}
-    >
-      <PairAccountsHint visible={visible} />
-      {isLoading ? (
-        <div style={{ padding: '48px 0', textAlign: 'center' }}>
-          <Spin />
-        </div>
-      ) : list.length === 0 ? (
-        <Empty
-          title="还没有 B 站账号"
-          description="投稿模板要选一个账号才能投稿"
-          style={{ padding: '48px 0' }}
-        >
-          <Button icon={<IconPlusCircle />} theme="solid" onClick={startAdding}>
-            添加账号
-          </Button>
-        </Empty>
-      ) : (
-        <List
-          dataSource={list}
-          split={false}
-          size="small"
-          renderItem={(item) => (
-            <AvatarCard
-              url={item.face}
-              abbr={item.name}
-              label={item.name}
-              value={item.value}
-              onRemove={async () => await remove(item.id)}
-            />
-          )}
-        />
-      )}
-    </FormSheet>
+      {visible && adding ? <AddAccountDialog onClose={() => setAdding(false)} onAdd={addUser} /> : null}
+    </>
   )
 }
 
