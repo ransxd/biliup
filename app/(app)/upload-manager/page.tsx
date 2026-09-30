@@ -141,15 +141,18 @@ export default function UploadManager() {
       {canManageAccounts && <UserList visible={visible} onCancel={change} />}
       <FormDialog
         size="lg"
-        title={`用「${selectEntity?.template_name ?? ''}」投稿`}
+        title="选择要投稿的文件"
         visible={visibleModal}
         okText={selectFiles.length > 0 ? `投稿 ${selectFiles.length} 个文件` : '投稿'}
         okDisabled={selectFiles.length === 0}
         onOk={handleOk}
         onCancel={() => setVisibleModal(false)}
       >
+        <Text type="tertiary" size="small" ellipsis={{ showTooltip: true }} style={{ display: 'block', marginBottom: 12 }}>
+          投稿模板：{selectEntity?.template_name}
+        </Text>
         <Transfer
-          style={{ height: 'min(416px, calc(100dvh - 260px))' }}
+          style={{ height: 'min(416px, calc(100dvh - 280px))', minWidth: 0 }}
           dataSource={data}
           draggable
           value={transferData}
